@@ -31,6 +31,8 @@ let failures = 0;
 
 async function run(name, path, check, vpName, opts = {}) {
   const ctx = await browser.newContext({ ignoreHTTPSErrors: !!process.env.IGNORE_HTTPS_ERRORS, viewport: VIEWPORTS[vpName], colorScheme: opts.dark ? 'dark' : 'light', serviceWorkers: 'block' });
+  // الاختبارات دي للوضع التجريبي، حتى لو الموقع متوصل بـ Firebase
+  await ctx.route(/\/firebase-config\.js$/, r => r.fulfill({ contentType: 'text/javascript', body: 'window.FIREBASE_CONFIG = null;' }));
   const page = await ctx.newPage();
   const errors = [];
   page.on('console', m => { if (m.type() === 'error') errors.push(`${m.text()} @ ${m.location().url || ''}`); });

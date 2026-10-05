@@ -1,5 +1,5 @@
 /* sw.js — PWA. زوّد VERSION مع كل تغيير في الملفات علشان العملاء ياخدوا النسخة الجديدة. */
-const VERSION = 'v3';
+const VERSION = 'v4';
 const CACHE = 'store-' + VERSION;
 
 const CORE = [

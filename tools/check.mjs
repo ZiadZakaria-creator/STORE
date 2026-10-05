@@ -70,8 +70,18 @@ function makeContext() {
 }
 function load(ctx, rel) { vm.runInContext(readFileSync(join(ROOT, rel), 'utf8'), ctx, { filename: rel }); }
 
+// firebase-config.js لازم يبقى null أو فيه apiKey و projectId
+{
+  const c = makeContext();
+  load(c, 'firebase-config.js');
+  const fb = c.FIREBASE_CONFIG;
+  ok(fb === null || (typeof fb.apiKey === 'string' && typeof fb.projectId === 'string' && !fb.emulators), 'firebase-config.js valid (and no emulators in repo)');
+}
+
+// الاختبارات بتشتغل على الوضع التجريبي دايماً، أياً كان firebase-config.js
 const ctx = makeContext();
-['firebase-config.js', 'js/core/core.js', 'js/core/config.js', 'js/core/i18n.js', 'js/core/money.js', 'js/core/validate.js',
+ctx.FIREBASE_CONFIG = null;
+['js/core/core.js', 'js/core/config.js', 'js/core/i18n.js', 'js/core/money.js', 'js/core/validate.js',
   'js/core/db.js', 'js/core/db-demo.js', 'js/core/db-firebase.js', 'js/core/auth.js', 'data/demo-data.js',
   'js/services/governorates.js', 'js/services/settings.js', 'js/services/catalog.js', 'js/services/images.js',
   'js/services/addresses.js', 'js/services/audit.js'

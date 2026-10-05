@@ -9,6 +9,18 @@
 | 2 — الدخول والمستخدمين | ✓ `auth.js` (إيميل/باسورد + Google)، و `account.html`، والعناوين، وشكل اللوحة كله، و RBAC، والموظفين والأدوار، و Audit log |
 | Firebase الحقيقي (من المرحلة 11) | ✓ `firestore.rules` لكل الـ collections الحالية ومتجربة على الـ Emulator (61 اختبار)، والموقع متجرب كامل في وضع Firebase على الـ Emulator (13 خطوة)، و `FIREBASE_SETUP.md`، وقسم **تجهيز المتجر** في اللوحة |
 
+## حالة Firebase الحقيقي (مشروع `store-4cfd5`)
+- **`firebase-config.js`** فيه إعدادات المشروع، والموقع شغال في وضع Firebase.
+- **القواعد:** `firestore.rules` منشورة. أي تعديل فيها لازم صاحب المتجر يلصقه في Console ← Firestore ← Rules ← Publish.
+- **الدخول:** Email/Password و Google متفعّلين، و `ziadzakaria-creator.github.io` في Authorized domains.
+- **أدمن واحد بس:** مدير عام (`admins/{uid}` بـ `role: super_admin`). صاحب المتجر مش عايز موظفين تانيين.
+- **"تجهيز المتجر" اتعمل:** 29 قسم، و 10 ألوان، و 28 مقاس، و 3 إعدادات، و 5 أدوار. مفيش منتجات ولا ماركات لسه.
+- **الإعدادات لسه فاضية:**
+  - `settings/general`: الاسم ما زال "اسم المتجر"، والواتساب فاضي.
+  - `settings/shipping`: كل المحافظات مقفولة لحد ما تتحط أسعار.
+- **الـ Indexes** المطلوبة في `FIREBASE_SETUP.md` (الخطوة 6). لو ناقص index، الـ console هيطلع لينك يعمله.
+- **الاختبارات بتفضل على الوضع التجريبي:** `tools/check.mjs` و `tests/smoke.mjs` بيجبروا `FIREBASE_CONFIG = null`.
+
 ## المراحل الجاية (بالترتيب، التفاصيل في `docs/ARCHITECTURE.md`)
 3. **المنتجات والأقسام والمخزون من اللوحة:** `admin-products.js`، و `admin-categories.js`، و `admin-catalog-meta.js`، و `admin-inventory.js`، ورفع الصور (`js/services/images.js` ← `productImages` و `fs:<id>`).
 4. **واجهة المتجر:** `shop.html` (فلترة وترتيب)، و `product.html`، و `wishlist.html`، ورفوف الرئيسية.

@@ -1,0 +1,14 @@
+{
+  "name": "Store",
+  "short_name": "Store",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#faf8f5",
+  "theme_color": "#111111",
+  "icons": [
+    { "src": "assets/img/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

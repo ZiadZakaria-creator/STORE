@@ -1,0 +1,98 @@
+/* components.css — أزرار، وكروت، وشارات، و drawer، و toast */
+
+/* ---------- أزرار ---------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2);
+  min-height: 48px; padding: 0 var(--sp-5);
+  border-radius: var(--radius-pill); border: 1px solid transparent;
+  font-weight: var(--fw-medium); font-size: var(--fs-sm); letter-spacing: .02em;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease), transform var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.btn:active { transform: scale(.98); }
+.btn-primary { background: var(--ink); color: var(--ink-text); }
+.btn-primary:hover { background: var(--accent); color: var(--accent-ink); }
+.btn-outline { border-color: currentColor; }
+.btn-outline:hover { background: var(--ink); color: var(--ink-text); border-color: var(--ink); }
+.btn-light { background: #fff; color: #111; }
+.btn-light:hover { background: var(--accent); color: var(--accent-ink); }
+.btn[disabled] { opacity: .5; pointer-events: none; }
+
+.icon-btn {
+  position: relative; display: inline-grid; place-items: center;
+  width: 44px; height: 44px; border-radius: var(--radius-pill);
+  transition: background var(--dur) var(--ease);
+}
+.icon-btn:hover { background: var(--surface-2); }
+.icon-btn svg { width: 22px; height: 22px; }
+.icon-btn .count {
+  position: absolute; top: 4px; inset-inline-end: 2px;
+  min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--radius-pill);
+  background: var(--accent); color: var(--accent-ink);
+  font-size: 11px; font-weight: var(--fw-bold); line-height: 18px; text-align: center;
+}
+.icon-btn .count:empty, .icon-btn .count[data-n="0"] { display: none; }
+
+.link-arrow { font-size: var(--fs-sm); font-weight: var(--fw-medium); border-bottom: 1px solid currentColor; padding-bottom: 2px; white-space: nowrap; }
+.link-arrow:hover { color: var(--accent); }
+
+/* ---------- شارات ---------- */
+.badge {
+  display: inline-flex; align-items: center; height: 24px; padding: 0 var(--sp-2);
+  border-radius: var(--radius-sm); font-size: var(--fs-xs); font-weight: var(--fw-bold); letter-spacing: .03em;
+  background: var(--surface); color: var(--text);
+}
+.badge-sale { background: var(--sale); color: #fff; }
+.badge-new { background: var(--ink); color: var(--ink-text); }
+.badge-out { background: var(--surface-2); color: var(--text-muted); }
+.badge-demo { background: var(--warning); color: #fff; }
+
+/* ---------- كارت المنتج ---------- */
+.product-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-5) var(--sp-3); }
+@media (min-width: 768px) { .product-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-6) var(--sp-5); } }
+@media (min-width: 1100px) { .product-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+.card { position: relative; display: flex; flex-direction: column; gap: var(--sp-3); }
+.card-media {
+  position: relative; aspect-ratio: 4 / 5; overflow: hidden;
+  border-radius: var(--radius); background: var(--surface-2);
+}
+.card-media img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: opacity .4s var(--ease), transform .6s var(--ease); }
+.card-media .alt { opacity: 0; }
+@media (hover: hover) {
+  .card:hover .card-media img:first-child { transform: scale(1.03); }
+  .card:hover .card-media .alt { opacity: 1; }
+}
+.card-badges { position: absolute; top: var(--sp-2); inset-inline-start: var(--sp-2); display: flex; gap: var(--sp-1); z-index: 1; }
+.card-body { display: flex; flex-direction: column; gap: 2px; }
+.card-brand { font-size: var(--fs-xs); color: var(--text-muted); text-transform: uppercase; letter-spacing: .08em; }
+.card-title { font-size: var(--fs-sm); font-weight: var(--fw-medium); line-height: 1.4; }
+.card-title a::after { content: ''; position: absolute; inset: 0; } /* الكارت كله لينك */
+.price { display: flex; align-items: baseline; gap: var(--sp-2); flex-wrap: wrap; font-size: var(--fs-sm); font-weight: var(--fw-bold); }
+.price .old { color: var(--text-muted); text-decoration: line-through; font-weight: var(--fw-regular); font-size: var(--fs-xs); }
+.price .now.is-sale { color: var(--sale); }
+.swatches { display: flex; gap: 6px; align-items: center; margin-top: var(--sp-1); }
+.swatch { width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--line); box-shadow: inset 0 0 0 1px rgba(255,255,255,.4); }
+.swatches .more { font-size: var(--fs-xs); color: var(--text-muted); }
+
+/* ---------- Drawer (القائمة والسلة) ---------- */
+.overlay { position: fixed; inset: 0; background: var(--overlay); opacity: 0; pointer-events: none; transition: opacity var(--dur) var(--ease); z-index: 60; }
+.overlay.open { opacity: 1; pointer-events: auto; }
+.drawer {
+  position: fixed; top: 0; bottom: 0; inset-inline-start: 0; z-index: 70;
+  width: min(360px, 88vw); background: var(--surface); box-shadow: var(--shadow-md);
+  transform: translateX(-100%); transition: transform .35s var(--ease);
+  display: flex; flex-direction: column;
+}
+[dir="rtl"] .drawer { transform: translateX(100%); }
+.drawer.open { transform: none !important; }
+.drawer-head { display: flex; align-items: center; justify-content: space-between; padding: var(--sp-3) var(--sp-4); border-bottom: 1px solid var(--line); }
+.drawer-body { flex: 1; overflow-y: auto; padding: var(--sp-4); }
+
+/* ---------- Toast ---------- */
+.toasts { position: fixed; bottom: var(--sp-4); inset-inline: var(--sp-4); z-index: 90; display: grid; gap: var(--sp-2); justify-items: center; pointer-events: none; }
+.toast { background: var(--ink); color: var(--ink-text); padding: var(--sp-3) var(--sp-5); border-radius: var(--radius-pill); font-size: var(--fs-sm); box-shadow: var(--shadow-md); animation: toast-in .3s var(--ease); }
+@keyframes toast-in { from { opacity: 0; transform: translateY(8px); } }
+
+/* ---------- Skeleton ---------- */
+.skeleton { background: linear-gradient(90deg, var(--surface-2) 0%, var(--line) 50%, var(--surface-2) 100%); background-size: 200% 100%; animation: shimmer 1.4s infinite linear; border-radius: var(--radius); }
+@keyframes shimmer { to { background-position: -200% 0; } }

@@ -30,13 +30,13 @@ const browser = await chromium.launch(executablePath ? { executablePath } : {});
 let failures = 0;
 
 async function run(name, path, check, vpName, opts = {}) {
-  const ctx = await browser.newContext({ viewport: VIEWPORTS[vpName], colorScheme: opts.dark ? 'dark' : 'light', serviceWorkers: 'block' });
+  const ctx = await browser.newContext({ ignoreHTTPSErrors: !!process.env.IGNORE_HTTPS_ERRORS, viewport: VIEWPORTS[vpName], colorScheme: opts.dark ? 'dark' : 'light', serviceWorkers: 'block' });
   const page = await ctx.newPage();
   const errors = [];
   page.on('console', m => { if (m.type() === 'error') errors.push(`${m.text()} @ ${m.location().url || ''}`); });
   page.on('pageerror', e => errors.push(e.message));
   if (opts.lang) await page.addInitScript(l => localStorage.setItem('cs:lang', JSON.stringify(l)), opts.lang);
-  await page.goto(BASE + path, { waitUntil: 'networkidle' });
+  await page.goto(BASE + path, { waitUntil: 'load' });
   try {
     await check(page);
     // مفيش scroll أفقي

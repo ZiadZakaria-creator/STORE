@@ -36,6 +36,62 @@
     return out;
   }
 
+  /* ---------- منتجات تجريبية لتظبيط شكل المتجر ----------
+     متعلّمة بـ demo: true علشان تتمسح كلها بضغطة. التقييمات والمبيعات صفر (ممنوع أرقام وهمية). */
+  function demoCatalog() {
+    const brands = D().brands.map(({ id, ...rest }) => ({ id, data: Object.assign({}, rest, { demo: true }) }));
+    const products = D().products.map(({ id, ...p }) => ({ id, data: Object.assign({}, p, {
+      demo: true, ratingAvg: 0, ratingCount: 0, soldCount: 0,
+      variants: p.variants.map(v => Object.assign({}, v, { reserved: 0, sold: 0 })),
+      createdAt: App.db.now(), updatedAt: App.db.now()
+    }) }));
+    return { brands, products };
+  }
+
+  function demoBox(existingDemo) {
+    const add = h('button', { class: 'btn btn-primary', text: 'ضيف منتجات تجريبية' });
+    const del = h('button', { class: 'btn btn-outline', text: `امسح المنتجات التجريبية (${existingDemo.products + existingDemo.brands})`, disabled: !(existingDemo.products + existingDemo.brands) });
+    const msg = h('div', { class: 'alert', role: 'status' });
+    const done = text => {
+      App.toast(text);
+      App.store.remove('cache:catalog');
+      root.dispatchEvent(new HashChangeEvent('hashchange'));
+    };
+    const fail = (b, e) => { console.error(e); msg.className = 'alert alert-error'; msg.textContent = 'فشلت العملية: ' + (e.message || e); App.form.busy(b, false); };
+
+    add.addEventListener('click', async () => {
+      App.form.busy(add, true);
+      try {
+        const { brands, products } = demoCatalog();
+        let n = 0;
+        for (const g of [['brands', brands], ['products', products]]) {
+          for (const d of g[1]) { if (!(await App.db.get(g[0], d.id))) { await App.db.set(g[0], d.id, d.data); n++; } }
+        }
+        await App.audit.log({ action: 'demo.added', entity: 'products', entityId: 'demo', after: { count: n }, summary: `ضاف ${n} منتج/ماركة تجريبية` });
+        done(n ? `اتضاف ${n}` : 'موجودين بالفعل');
+      } catch (e) { fail(add, e); }
+    });
+
+    del.addEventListener('click', async () => {
+      if (!(await App.ui.confirm('امسح كل المنتجات والماركات التجريبية؟ المنتجات اللي إنت ضفتها مش هتتمس.', 'امسح'))) return;
+      App.form.busy(del, true);
+      try {
+        let n = 0;
+        for (const path of ['products', 'brands']) {
+          for (const d of await App.db.list(path, { where: [['demo', '==', true]] })) { await App.db.remove(path, d.id); n++; }
+        }
+        await App.audit.log({ action: 'demo.removed', entity: 'products', entityId: 'demo', before: { count: n }, summary: `مسح ${n} منتج/ماركة تجريبية` });
+        done(`اتمسح ${n}`);
+      } catch (e) { fail(del, e); }
+    });
+
+    return App.ui.box('منتجات تجريبية (لتظبيط شكل المتجر)', [
+      h('p', { class: 'muted', style: 'margin-bottom:12px', text: '12 منتج و4 ماركات بأسماء وهمية، وكل منتج مكتوب جنبه (تجريبي). الصور رسومات بسيطة، والأسعار والمخزون تجريبيين، والتقييمات والمبيعات صفر. هتبان لأي حد يفتح المتجر، فامسحها قبل ما تبدأ تبيع.' }),
+      h('div', { class: 'toolbar' }, [add, del]),
+      h('div', { style: 'margin-top:12px' }, msg)
+    ]);
+  }
+
   App.admin.route({
     id: 'setup', label: 'تجهيز المتجر', icon: App.adminIcons.setup, perm: 'staff.manage',
     async badge() { return (await status()).filter(g => g.missing.length).length; },
@@ -84,6 +140,13 @@
         h('div', { style: 'margin-top:16px;display:grid;gap:12px;justify-items:start' }, [btn, log]),
         h('p', { class: 'muted', style: 'margin-top:12px;font-size:.85rem', text: 'ملحوظة: مفيش منتجات ولا أسعار شحن بتتضاف هنا. المنتجات بتتضاف من قسم المنتجات، وأسعار الشحن من الإعدادات، وكل المحافظات بتبدأ مقفولة.' })
       ]));
+      if (!App.config.isDemo && App.can('products.write')) {
+        const [dp, db] = await Promise.all([
+          App.db.list('products', { where: [['demo', '==', true]] }),
+          App.db.list('brands', { where: [['demo', '==', true]] })
+        ]);
+        el.append(demoBox({ products: dp.length, brands: db.length }));
+      }
     }
   });
 })(window);

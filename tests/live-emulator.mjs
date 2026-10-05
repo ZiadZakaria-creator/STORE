@@ -143,6 +143,26 @@ await step('store shows categories read from Firestore REST', async () => {
   await A.page.screenshot({ path: OUT + 'live-home.png', fullPage: true });
 });
 
+await step('demo products: add (visible in store) then remove', async () => {
+  const p = A.page;
+  await p.goto(BASE + 'admin/index.html#/setup');
+  await p.reload();
+  await p.waitForSelector('text=ضيف منتجات تجريبية', { timeout: 15000 });
+  await p.click('text=ضيف منتجات تجريبية');
+  await p.waitForSelector('text=اتضاف 16', { timeout: 30000 });
+  const prods = await consoleList('products');
+  if (prods.length !== 12 || !prods.every(d => d.fields.demo.booleanValue && d.fields.soldCount.integerValue === '0')) throw new Error('demo products not stored correctly');
+  await p.goto(BASE + 'index.html');
+  await p.waitForSelector('.card', { timeout: 15000 });
+  await p.screenshot({ path: OUT + 'live-home-demo-products.png', fullPage: true });
+  await p.goto(BASE + 'admin/index.html#/setup');
+  await p.reload();
+  await p.click('text=امسح المنتجات التجريبية');
+  await p.click('.modal-foot .btn-primary');
+  await p.waitForSelector('text=اتمسح 16', { timeout: 30000 });
+  if ((await consoleList('products')).length !== 0 || (await consoleList('brands')).length !== 0) throw new Error('demo not removed');
+});
+
 /* ============ 4) عميل تاني ← موظف ============ */
 const B = await newPage({ width: 1440, height: 900 });
 await step('second user registers and adds an address', async () => {

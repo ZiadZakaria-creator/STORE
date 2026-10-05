@@ -42,11 +42,14 @@
       h('div', { class: 'section-head' }, h('h2', { class: 'section-title', text: App.t('home.categories') })),
       h('div', { class: 'cat-grid' }, tops.map(c => {
         // صورة القسم: صورته لو موجودة، أو صورة أول منتج فيه
-        const first = App.catalog.products.find(p => p.categoryId === c.id);
+        const first = App.catalog.products.find(p => p.categoryId === c.id && p.images && p.images.length);
         const ref = c.image || (first && first.images[0]);
+        const href = `shop.html?cat=${encodeURIComponent(c.slug)}`;
+        // قسم من غير صورة ولا منتجات: اسمه بس (من غير صورة مضللة)
+        if (!ref) return h('a', { class: 'cat-tile no-img', href }, h('span', { text: App.tx(c.name) }));
         const img = h('img', { alt: '', loading: 'lazy', width: '400', height: '500' });
         App.img.apply(img, ref);
-        return h('a', { class: 'cat-tile', href: `shop.html?cat=${encodeURIComponent(c.slug)}` }, [img, h('span', { text: App.tx(c.name) })]);
+        return h('a', { class: 'cat-tile', href }, [img, h('span', { text: App.tx(c.name) })]);
       }))
     ]);
   }

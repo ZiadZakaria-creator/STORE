@@ -13,8 +13,10 @@ service cloud.firestore {
         && exists(/databases/$(db)/documents/admins/$(request.auth.uid))
         && adminDoc().data.active == true;
     }
+    // المدير العام عنده كل الصلاحيات حتى لو roles لسه فاضي (علشان أول تجهيز للمتجر)
+    function isSuperAdmin() { return isAdmin() && adminDoc().data.role == 'super_admin'; }
     function perms() { return get(/databases/$(db)/documents/roles/$(adminDoc().data.role)).data.permissions; }
-    function can(p) { return isAdmin() && (('all' in perms()) || (p in perms())); }
+    function can(p) { return isSuperAdmin() || (isAdmin() && (('all' in perms()) || (p in perms()))); }
 
     function str(v, min, max) { return v is string && v.size() >= min && v.size() <= max; }
     function optStr(data, k, max) { return !(k in data) || (data[k] is string && data[k].size() <= max); }
@@ -71,14 +73,32 @@ service cloud.firestore {
     match /admins/{uid} {
       // الأدمن يقرا مستنده هو (علشان اللوحة تعرف دوره)، و staff.manage يقرا الكل
       allow read: if isOwner(uid) || can('staff.manage');
-      // محدش يعدل نفسه (علشان محدش يرقّي نفسه أو يقفل نفسه بالغلط)
-      allow write: if can('staff.manage') && request.auth.uid != uid;
+      // محدش يعدل نفسه (علشان محدش يرقّي نفسه أو يقفل نفسه بالغلط)،
+      // والمدير العام بس اللي يعيّن مدير عام أو يعدّل/يمسح مدير عام
+      allow create: if can('staff.manage') && request.auth.uid != uid
+        && onlyKeys(request.resource.data, ['name', 'email', 'role', 'active', 'createdAt', 'updatedAt'])
+        && str(request.resource.data.role, 2, 40) && request.resource.data.active is bool
+        && (request.resource.data.role != 'super_admin' || isSuperAdmin());
+      allow update: if can('staff.manage') && request.auth.uid != uid
+        && onlyKeys(request.resource.data, ['name', 'email', 'role', 'active', 'createdAt', 'updatedAt'])
+        && str(request.resource.data.role, 2, 40) && request.resource.data.active is bool
+        && ((resource.data.role != 'super_admin' && request.resource.data.role != 'super_admin') || isSuperAdmin());
+      allow delete: if can('staff.manage') && request.auth.uid != uid
+        && (resource.data.role != 'super_admin' || isSuperAdmin());
     }
     match /roles/{id} {
       allow read: if isAdmin();
-      // دور المدير العام مبيتغيرش ومبيتمسحش
-      allow create, update: if can('staff.manage') && id != 'super_admin';
+      // مستند المدير العام: بيتعمل مرة بـ ['all'] من المدير العام، ومبيتغيرش ومبيتمسحش
+      allow create: if can('staff.manage') && validRole()
+        && (id != 'super_admin' || (isSuperAdmin() && request.resource.data.permissions == ['all']));
+      allow update: if can('staff.manage') && validRole() && id != 'super_admin';
       allow delete: if can('staff.manage') && id != 'super_admin';
+    }
+    function validRole() {
+      return onlyKeys(request.resource.data, ['name', 'permissions'])
+        && request.resource.data.name is map
+        && str(request.resource.data.name.ar, 1, 40) && str(request.resource.data.name.en, 1, 40)
+        && request.resource.data.permissions is list && request.resource.data.permissions.size() <= 30;
     }
 
     /* ---------- سجل العمليات: إضافة بس، ومحدش يعدل أو يمسح ---------- */

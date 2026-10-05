@@ -76,7 +76,11 @@
     sdkPromise = (async () => {
       const [appMod, fsMod] = await Promise.all([import(SDK('app')), import(SDK('firestore'))]);
       const app = appMod.getApps().length ? appMod.getApp() : appMod.initializeApp(App.config.firebase);
-      return { app, fs: fsMod, db: fsMod.getFirestore(app) };
+      const db = fsMod.getFirestore(app);
+      // للتجربة المحلية بس: FIREBASE_CONFIG.emulators = { firestore: '127.0.0.1:8085', auth: 'http://127.0.0.1:9099' }
+      const emu = App.config.firebase.emulators;
+      if (emu && emu.firestore) { const [host, port] = emu.firestore.split(':'); fsMod.connectFirestoreEmulator(db, host, Number(port)); }
+      return { app, fs: fsMod, db };
     })();
     return sdkPromise;
   }
@@ -122,7 +126,11 @@
     return fs.query(fs.collection(db, path), ...parts);
   }
 
-  const base = () => `https://firestore.googleapis.com/v1/projects/${App.config.firebase.projectId}/databases/(default)/documents`;
+  const base = () => {
+    const emu = App.config.firebase.emulators;
+    const host = emu && emu.firestore ? `http://${emu.firestore}` : 'https://firestore.googleapis.com';
+    return `${host}/v1/projects/${App.config.firebase.projectId}/databases/(default)/documents`;
+  };
 
   async function restFetch(url, init) {
     const headers = { 'Content-Type': 'application/json' };
@@ -147,9 +155,12 @@
       const rows = await restFetch(url, { method: 'POST', body: JSON.stringify({ structuredQuery: structuredQuery(path, q) }) });
       return (rows || []).filter(r => r.document).map(r => docFromRest(r.document));
     },
+    // batchGet بدل GET: المستند اللي مش موجود بيرجع missing بدل 404 (من غير أخطاء في الـ console)
     async get(path, id) {
-      const d = await restFetch(`${base()}/${path}/${encodeURIComponent(id)}`);
-      return docFromRest(d);
+      const name = `projects/${App.config.firebase.projectId}/databases/(default)/documents/${path}/${id}`;
+      const rows = await restFetch(base() + ':batchGet', { method: 'POST', body: JSON.stringify({ documents: [name] }) });
+      const hit = (rows || []).find(r => r.found);
+      return hit ? docFromRest(hit.found) : null;
     },
     async add(path, data) {
       const sdk = await loadSDK();

@@ -33,7 +33,7 @@
   position: sticky; top: 0; z-index: 40; display: flex; align-items: center; gap: var(--sp-3);
   height: 64px; padding-inline: var(--gutter); background: var(--surface); border-bottom: 1px solid var(--line);
 }
-.topbar h1 { font-size: var(--fs-lg); }
+.topbar h1 { font-size: var(--fs-lg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .topbar .spacer { flex: 1; }
 .burger { display: inline-grid; }
 @media (min-width: 1024px) { .burger { display: none; } }

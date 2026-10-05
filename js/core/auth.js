@@ -134,6 +134,8 @@
     const sdk = await App.FirebaseAdapter.loadSDK();
     const mod = await import(`https://www.gstatic.com/firebasejs/${App.FirebaseAdapter.SDK_VERSION}/firebase-auth.js`);
     fbAuth = { mod, auth: mod.getAuth(sdk.app) };
+    const emu = App.config.firebase.emulators;
+    if (emu && emu.auth) mod.connectAuthEmulator(fbAuth.auth, emu.auth, { disableWarnings: true });
     fbAuth.auth.languageCode = App.i18n.lang;
     return fbAuth;
   }
@@ -173,8 +175,9 @@
       await mod.reauthenticateWithCredential(u, mod.EmailAuthProvider.credential(u.email, currentPw));
       await mod.updatePassword(u, nextPw);
     }),
+    // مش بنعتمد على current: أثناء التسجيل بنقرا البروفايل قبل ما current يتحدد
     async idToken() {
-      if (!current) return null;
+      if (!fbAuth && !App.store.get(HINT)) return null;
       const { auth } = await loadAuth();
       return auth.currentUser ? auth.currentUser.getIdToken() : null;
     }
@@ -238,8 +241,10 @@
       const a = await App.db.get('admins', current.uid).catch(() => null);
       if (!a || !a.active) return null;
       const role = await App.db.get('roles', a.role).catch(() => null);
+      // المدير العام عنده كل الصلاحيات حتى قبل ما الأدوار تتجهز (نفس firestore.rules)
+      const permissions = a.role === 'super_admin' ? ['all'] : ((role && role.permissions) || []);
       App.auth.admin = { uid: current.uid, name: a.name || current.name, email: a.email || current.email, role: a.role,
-        roleName: role ? role.name : { ar: a.role, en: a.role }, permissions: (role && role.permissions) || [] };
+        roleName: role ? role.name : (a.role === 'super_admin' ? { ar: 'مدير عام', en: 'Super Admin' } : { ar: a.role, en: a.role }), permissions };
       return App.auth.admin;
     },
     demoAdmin: async role => {

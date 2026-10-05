@@ -6,7 +6,7 @@
 - **التصميم الكامل:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - **قواعد الشغل:** [`AGENTS.md`](AGENTS.md).
 
-> الحالة: **المرحلة 2 (الدخول والحسابات والصلاحيات)**. باقي المراحل في `docs/ARCHITECTURE.md` (الجزء 12).
+> الحالة: **المرحلة 2 خلصت + Firebase الحقيقي جاهز** (rules متجربة على الـ Emulator). الخطوات اللي هتعملها بإيدك في [`FIREBASE_SETUP.md`](FIREBASE_SETUP.md)، والتسليم للي هيكمل في [`docs/HANDOFF.md`](docs/HANDOFF.md).
 
 ## التشغيل محلياً
 مش محتاج تسطّب أي حاجة:
@@ -33,7 +33,9 @@ python3 -m http.server 8080
 ## الحسابات والصلاحيات
 - **العملاء:** إيميل وباسورد، أو Google. بيعملوا كده من `account.html` (تسجيل، ودخول، ونسيت الباسورد، وتغيير الباسورد، والبروفايل، والعناوين).
 - **الأدمن:** `admins/{uid}` فيه `role`، و `roles/{id}` فيه `permissions[]`، و `firestore.rules` بتتحقق منهم.
-- **أول مدير عام:** بيتعمل بإيدك من Firebase Console، والخطوات هتبقى في `FIREBASE_SETUP.md` (المرحلة 11). بعد كده المدير العام بيضيف باقي الموظفين من **اللوحة ← الموظفين والأدوار**.
+- **أول مدير عام:** بيتعمل بإيدك من Firebase Console، والخطوات في `FIREBASE_SETUP.md` (الخطوة 8). بعد كده بتعمل الآتي من اللوحة:
+  - **تجهيز المتجر:** الأدوار، والأقسام، والألوان، والمقاسات، والإعدادات.
+  - **الموظفين والأدوار:** إضافة باقي الموظفين.
 
 ## الفحص قبل كل commit
 ```bash
@@ -62,14 +64,14 @@ js/services/  catalog · settings · images · governorates · addresses · audi
 js/ui/        common (هيدر/فوتر) · product-card · forms · icons
 js/pages/     home · account · notfound
 data/         demo-data.js (للوضع التجريبي بس)
-admin/        لوحة التحكم: admin.js (الدخول والراوتر) · admin-ui · overview · staff · audit
-firestore.rules, firestore.indexes.json
+admin/        لوحة التحكم: admin.js (الدخول والراوتر) · admin-ui · overview · staff · audit · setup
+firestore.rules, firestore.indexes.json, firebase.json, FIREBASE_SETUP.md
 tools/        check.mjs
-tests/        smoke.mjs
+tests/        smoke.mjs (تجريبي) · rules.test.mjs · live-emulator.mjs (Firebase Emulator)
 ```
 
 ## اللي لسه جاي
-المنتجات والمخزون، والمتجر الكامل، والسلة، والـ checkout، والطلبات، والدفع، والشحن، ولوحة التحكم، والتقارير، والكوبونات، والتقييمات، و Firebase الحقيقي، و SEO. وفي آخر مرحلة هيتضاف لـ README:
+المنتجات والمخزون، والمتجر الكامل، والسلة، والـ checkout، والطلبات، والدفع، والشحن، ولوحة التحكم، والتقارير، والكوبونات، والتقييمات، و SEO. التفاصيل في `docs/HANDOFF.md`. وفي آخر مرحلة هيتضاف لـ README:
 - إعداد الدفع.
 - ربط شركات الشحن.
 - إنشاء حساب الأدمن.

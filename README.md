@@ -6,7 +6,7 @@
 - **التصميم الكامل:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - **قواعد الشغل:** [`AGENTS.md`](AGENTS.md).
 
-> الحالة: **المرحلة 1 (الأساس)**. باقي المراحل في `docs/ARCHITECTURE.md` (الجزء 12).
+> الحالة: **المرحلة 2 (الدخول والحسابات والصلاحيات)**. باقي المراحل في `docs/ARCHITECTURE.md` (الجزء 12).
 
 ## التشغيل محلياً
 مش محتاج تسطّب أي حاجة:
@@ -27,6 +27,13 @@ python3 -m http.server 8080
 وبيظهر شريط "المنتجات والأسعار المعروضة تجريبية".
 
 علشان ترجّع البيانات التجريبية لأولها: افتح الـ console واكتب `App.DemoAdapter.reset()`.
+
+**تجربة اللوحة في الوضع التجريبي:** افتح `/admin/` واختار دور (مدير عام، أو مدير المتجر، أو ...). مفيش باسورد في الوضع ده، والهدف إنك تجرب الفرق في الصلاحيات.
+
+## الحسابات والصلاحيات
+- **العملاء:** إيميل وباسورد، أو Google. بيعملوا كده من `account.html` (تسجيل، ودخول، ونسيت الباسورد، وتغيير الباسورد، والبروفايل، والعناوين).
+- **الأدمن:** `admins/{uid}` فيه `role`، و `roles/{id}` فيه `permissions[]`، و `firestore.rules` بتتحقق منهم.
+- **أول مدير عام:** بيتعمل بإيدك من Firebase Console، والخطوات هتبقى في `FIREBASE_SETUP.md` (المرحلة 11). بعد كده المدير العام بيضيف باقي الموظفين من **اللوحة ← الموظفين والأدوار**.
 
 ## الفحص قبل كل commit
 ```bash
@@ -50,18 +57,19 @@ NODE_PATH=$(npm root -g) node tests/smoke.mjs          # Playwright: موباي�
 ```
 index.html, 404.html, sw.js, manifest.webmanifest, firebase-config.js
 assets/css/   tokens.css (الألوان والمسافات) · base.css · components.css · store.css
-js/core/      core · config · i18n · money · validate · db (+ db-demo, db-firebase)
-js/services/  catalog · settings · images · governorates
-js/ui/        common (هيدر/فوتر) · product-card · icons
-js/pages/     home · notfound
+js/core/      core · config · i18n · money · validate · db (+ db-demo, db-firebase) · auth
+js/services/  catalog · settings · images · governorates · addresses · audit
+js/ui/        common (هيدر/فوتر) · product-card · forms · icons
+js/pages/     home · account · notfound
 data/         demo-data.js (للوضع التجريبي بس)
-admin/        لوحة التحكم (المرحلة 2 وما بعدها)
+admin/        لوحة التحكم: admin.js (الدخول والراوتر) · admin-ui · overview · staff · audit
+firestore.rules, firestore.indexes.json
 tools/        check.mjs
 tests/        smoke.mjs
 ```
 
 ## اللي لسه جاي
-الدخول، والمنتجات والمخزون، والمتجر الكامل، والسلة، والـ checkout، والطلبات، والدفع، والشحن، ولوحة التحكم، والتقارير، والكوبونات، والتقييمات، و Firebase الحقيقي، و SEO. وفي آخر مرحلة هيتضاف لـ README:
+المنتجات والمخزون، والمتجر الكامل، والسلة، والـ checkout، والطلبات، والدفع، والشحن، ولوحة التحكم، والتقارير، والكوبونات، والتقييمات، و Firebase الحقيقي، و SEO. وفي آخر مرحلة هيتضاف لـ README:
 - إعداد الدفع.
 - ربط شركات الشحن.
 - إنشاء حساب الأدمن.

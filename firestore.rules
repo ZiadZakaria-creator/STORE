@@ -1,0 +1,104 @@
+rules_version = '2';
+// firestore.rules — كل collection ليه rule صريحة، والباقي مقفول (آخر match).
+// الصلاحيات: admins/{uid}.role → roles/{role}.permissions (نفس أسماء App.PERMISSIONS).
+service cloud.firestore {
+  match /databases/{db}/documents {
+
+    /* ---------- دوال مساعدة ---------- */
+    function signedIn() { return request.auth != null; }
+    function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
+    function adminDoc() { return get(/databases/$(db)/documents/admins/$(request.auth.uid)); }
+    function isAdmin() {
+      return signedIn()
+        && exists(/databases/$(db)/documents/admins/$(request.auth.uid))
+        && adminDoc().data.active == true;
+    }
+    function perms() { return get(/databases/$(db)/documents/roles/$(adminDoc().data.role)).data.permissions; }
+    function can(p) { return isAdmin() && (('all' in perms()) || (p in perms())); }
+
+    function str(v, min, max) { return v is string && v.size() >= min && v.size() <= max; }
+    function optStr(data, k, max) { return !(k in data) || (data[k] is string && data[k].size() <= max); }
+    function phoneEG(v) { return v is string && v.matches('^01[0125][0-9]{8}$'); }
+    // المفاتيح المسموحة بس
+    function onlyKeys(data, keys) { return data.keys().hasOnly(keys); }
+
+    /* ---------- الكتالوج والإعدادات العامة: الكل يقرا، والأدمن بس يكتب ---------- */
+    match /products/{id}      { allow read: if true; allow write: if can('products.write') || can('inventory.write'); }
+    match /productImages/{id} { allow read: if true; allow write: if can('products.write') || can('categories.write'); }
+    match /categories/{id}    { allow read: if true; allow write: if can('categories.write'); }
+    match /brands/{id}        { allow read: if true; allow write: if can('categories.write'); }
+    match /colors/{id}        { allow read: if true; allow write: if can('categories.write'); }
+    match /sizes/{id}         { allow read: if true; allow write: if can('categories.write'); }
+    match /settings/{id}      { allow read: if true; allow write: if can('settings.write'); }
+
+    /* ---------- العملاء ---------- */
+    match /users/{uid} {
+      allow read: if isOwner(uid) || can('customers.read') || can('staff.manage') || can('orders.read');
+      allow create: if isOwner(uid)
+        && onlyKeys(request.resource.data, ['name', 'email', 'phone', 'wishlist', 'createdAt'])
+        && str(request.resource.data.name, 0, 80)
+        && request.resource.data.email == request.auth.token.email
+        && (request.resource.data.phone == '' || phoneEG(request.resource.data.phone))
+        && request.resource.data.wishlist is list && request.resource.data.wishlist.size() <= 200
+        && request.resource.data.createdAt == request.time;
+      allow update: if isOwner(uid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'phone', 'wishlist', 'updatedAt'])
+        && str(request.resource.data.name, 0, 80)
+        && (request.resource.data.phone == '' || phoneEG(request.resource.data.phone))
+        && request.resource.data.wishlist is list && request.resource.data.wishlist.size() <= 200;
+      allow delete: if false;
+
+      match /addresses/{aid} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+          && onlyKeys(request.resource.data, ['label', 'name', 'phone', 'governorate', 'city', 'area', 'street', 'building', 'floor', 'apartment', 'notes', 'isDefault', 'createdAt', 'updatedAt'])
+          && str(request.resource.data.name, 2, 80)
+          && phoneEG(request.resource.data.phone)
+          && str(request.resource.data.governorate, 2, 30)
+          && str(request.resource.data.city, 2, 60)
+          && str(request.resource.data.area, 2, 80)
+          && str(request.resource.data.street, 2, 120)
+          && str(request.resource.data.building, 1, 20)
+          && optStr(request.resource.data, 'label', 40)
+          && optStr(request.resource.data, 'floor', 40)
+          && optStr(request.resource.data, 'apartment', 40)
+          && optStr(request.resource.data, 'notes', 300);
+        allow read: if can('customers.read');
+      }
+    }
+
+    /* ---------- الأدمنز والأدوار ---------- */
+    match /admins/{uid} {
+      // الأدمن يقرا مستنده هو (علشان اللوحة تعرف دوره)، و staff.manage يقرا الكل
+      allow read: if isOwner(uid) || can('staff.manage');
+      // محدش يعدل نفسه (علشان محدش يرقّي نفسه أو يقفل نفسه بالغلط)
+      allow write: if can('staff.manage') && request.auth.uid != uid;
+    }
+    match /roles/{id} {
+      allow read: if isAdmin();
+      // دور المدير العام مبيتغيرش ومبيتمسحش
+      allow create, update: if can('staff.manage') && id != 'super_admin';
+      allow delete: if can('staff.manage') && id != 'super_admin';
+    }
+
+    /* ---------- سجل العمليات: إضافة بس، ومحدش يعدل أو يمسح ---------- */
+    match /auditLogs/{id} {
+      allow read: if can('audit.read');
+      allow create: if isAdmin()
+        && request.resource.data.by == request.auth.uid
+        && request.resource.data.at == request.time
+        && str(request.resource.data.action, 1, 60)
+        && str(request.resource.data.entity, 1, 40);
+      allow update, delete: if false;
+    }
+
+    /* ---------- الطلبات: الـ rules الكاملة في مرحلة الطلبات ---------- */
+    match /orders/{id} {
+      allow read: if (signedIn() && resource.data.uid == request.auth.uid) || can('orders.read');
+      allow write: if false;
+    }
+
+    /* ---------- أي حاجة تانية مقفولة ---------- */
+    match /{document=**} { allow read, write: if false; }
+  }
+}

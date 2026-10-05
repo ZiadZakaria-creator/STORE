@@ -138,6 +138,7 @@
   const Firebase = {
     name: 'firebase',
     loadSDK,
+    SDK_VERSION,
     _test: { decode, encode, structuredQuery },
 
     async list(path, q) {

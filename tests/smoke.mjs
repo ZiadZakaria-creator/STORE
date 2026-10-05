@@ -20,7 +20,9 @@ const PAGES = [
     if (!logo.trim()) throw new Error('home: empty logo');
     if (!(await p.isVisible('.demo-strip'))) throw new Error('home: demo strip missing in demo mode');
   }],
-  ['404', '404.html', async p => { await p.waitForSelector('.notfound h1'); }]
+  ['404', '404.html', async p => { await p.waitForSelector('.notfound h1'); }],
+  ['account', 'account.html', async p => { await p.waitForSelector('.auth-panel form'); }],
+  ['admin-gate', 'admin/index.html', async p => { await p.waitForSelector('.gate [data-role]'); }]
 ];
 
 const executablePath = process.env.CHROMIUM_PATH || undefined;
@@ -39,7 +41,10 @@ async function run(name, path, check, vpName, opts = {}) {
     await check(page);
     // مفيش scroll أفقي
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-    if (overflow > 1) throw new Error(`horizontal overflow ${overflow}px`);
+    if (overflow > 1) {
+      const wide = await page.evaluate(() => [...document.querySelectorAll('body *')].filter(e => e.getBoundingClientRect().right > window.innerWidth + 1 || e.getBoundingClientRect().left < -1).slice(0, 3).map(e => e.tagName + '.' + e.className));
+      throw new Error(`horizontal overflow ${overflow}px: ${wide.join(', ')}`);
+    }
   } catch (e) { errors.push(e.message); }
   // خطوط Google ممكن تتمنع في بيئة الاختبار، دي مش أخطاء في الموقع
   const real = errors.filter(e => !/fonts\.(googleapis|gstatic)\.com/.test(e));
@@ -68,6 +73,83 @@ await run('menu', 'index.html', async p => {
   await p.waitForFunction(() => document.documentElement.dir === 'ltr');
   const logo = await p.$eval('.site-header .logo', el => el.scrollWidth <= el.clientWidth);
   if (!logo) throw new Error('logo is truncated');
+}, 'mobile');
+
+// رحلة العميل: تسجيل ← عنوان ← خروج ← دخول ← تغيير باسورد
+await run('account-flow', 'account.html', async p => {
+  await p.waitForSelector('.auth-panel');
+  await p.click('.tabs .tab:nth-child(2)');
+  await p.click('button[type=submit]');                       // فاضي ← أخطاء
+  if (!(await p.textContent('[data-error-for="email"]')).trim()) throw new Error('validation errors not shown');
+  await p.fill('[name=name]', 'Mona Ahmed');
+  await p.fill('[name=email]', 'mona@test.com');
+  await p.fill('[name=phone]', '01012345678');
+  await p.fill('[name=password]', 'secret123');
+  await p.click('button[type=submit]');
+  await p.waitForSelector('.account-head');
+  await p.click('a[href="#addresses"]');
+  await p.click('text=إضافة عنوان');
+  await p.selectOption('[name=governorate]', 'giza');
+  for (const [k, v] of [['city', '6 October'], ['area', 'Hay 7'], ['street', 'Central Axis'], ['building', '5']]) await p.fill(`[name=${k}]`, v);
+  await p.click('form.panel button[type=submit]');
+  await p.waitForSelector('.address-card.is-default');
+  await p.screenshot({ path: OUT + 'account-addresses-mobile.png', fullPage: true });
+  await p.click('text=تسجيل الخروج');
+  await p.waitForSelector('.auth-panel');
+  await p.click('.tabs .tab:nth-child(1)');
+  await p.fill('[name=email]', 'mona@test.com');
+  await p.fill('[name=password]', 'wrongpass');
+  await p.click('button[type=submit]');
+  await p.waitForSelector('.alert-error');
+  await p.fill('[name=password]', 'secret123');
+  await p.click('button[type=submit]');
+  await p.waitForSelector('.account-head');
+  await p.click('a[href="#security"]');
+  await p.fill('[name=current]', 'secret123');
+  await p.fill('[name=next]', 'newsecret1');
+  await p.click('button[type=submit]');
+  await p.waitForSelector('.toast');
+}, 'mobile');
+
+// Google ← طلب رقم الموبايل مرة واحدة
+await run('account-google', 'account.html', async p => {
+  await p.waitForSelector('.auth-panel');
+  await p.click('.btn-google');
+  await p.waitForSelector('[name=phone]');
+  await p.fill('[name=phone]', '01112345678');
+  await p.click('button[type=submit]');
+  await p.waitForSelector('.account-head');
+  if (await p.isVisible('a[href="#security"]')) { await p.click('a[href="#security"]'); await p.waitForSelector('text=Google'); }
+}, 'desktop');
+
+// اللوحة: دخول كمدير عام ← الموظفين ← تغيير دور ← السجل
+await run('admin-flow', 'admin/index.html', async p => {
+  await p.click('.gate [data-role="customer_support"]');
+  await p.waitForSelector('.side-nav');
+  if (await p.$('a[data-route="staff"]')) throw new Error('customer support should not see staff');
+  await p.click('text=خروج');
+  await p.click('.gate [data-role="super_admin"]');
+  await p.waitForSelector('.kpis');
+  await p.screenshot({ path: OUT + 'admin-overview-desktop.png', fullPage: true });
+  await p.click('a[data-route="staff"]');
+  await p.waitForSelector('text=الأدوار والصلاحيات');
+  // الأدمن التاني (customer support) ← محاسب
+  const select = await p.$('tbody tr:has-text("customer.support") select');
+  await select.selectOption('accountant');
+  await p.waitForSelector('.toast');
+  await p.screenshot({ path: OUT + 'admin-staff-desktop.png', fullPage: true });
+  await p.click('a[data-route="audit"]');
+  await p.waitForSelector('text=محاسب');
+  await p.screenshot({ path: OUT + 'admin-audit-desktop.png', fullPage: true });
+}, 'desktop');
+
+await run('admin-mobile', 'admin/index.html', async p => {
+  await p.click('.gate [data-role="super_admin"]');
+  await p.waitForSelector('.kpis');
+  await p.click('.burger');
+  await p.waitForSelector('.sidebar.open');
+  await p.click('a[data-route="staff"]');
+  await p.waitForSelector('text=الأدوار والصلاحيات');
 }, 'mobile');
 
 await browser.close();

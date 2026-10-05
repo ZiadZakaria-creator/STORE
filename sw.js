@@ -1,17 +1,17 @@
 /* sw.js — PWA. زوّد VERSION مع كل تغيير في الملفات علشان العملاء ياخدوا النسخة الجديدة. */
-const VERSION = 'v1';
+const VERSION = 'v2';
 const CACHE = 'store-' + VERSION;
 
 const CORE = [
-  './', 'index.html', '404.html', 'manifest.webmanifest', 'firebase-config.js',
+  './', 'index.html', 'account.html', '404.html', 'manifest.webmanifest', 'firebase-config.js',
   'assets/css/tokens.css', 'assets/css/base.css', 'assets/css/components.css', 'assets/css/store.css',
   'assets/img/icon.svg',
   'js/core/boot.js', 'js/core/core.js', 'js/core/config.js', 'js/core/i18n.js', 'js/core/money.js',
-  'js/core/validate.js', 'js/core/db.js', 'js/core/db-demo.js', 'js/core/db-firebase.js',
+  'js/core/validate.js', 'js/core/db.js', 'js/core/db-demo.js', 'js/core/db-firebase.js', 'js/core/auth.js',
   'data/demo-data.js',
-  'js/services/governorates.js', 'js/services/settings.js', 'js/services/catalog.js', 'js/services/images.js',
-  'js/ui/icons.js', 'js/ui/common.js', 'js/ui/product-card.js',
-  'js/pages/home.js', 'js/pages/notfound.js'
+  'js/services/governorates.js', 'js/services/settings.js', 'js/services/catalog.js', 'js/services/images.js', 'js/services/addresses.js',
+  'js/ui/icons.js', 'js/ui/common.js', 'js/ui/product-card.js', 'js/ui/forms.js',
+  'js/pages/home.js', 'js/pages/account.js', 'js/pages/notfound.js'
 ];
 
 self.addEventListener('install', e => {

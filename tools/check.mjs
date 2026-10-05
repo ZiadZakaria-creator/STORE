@@ -37,14 +37,19 @@ for (const f of core) if (f !== './') ok(existsSync(join(ROOT, f)), `sw.js CORE 
 ok(/const VERSION = 'v\d+';/.test(sw), 'sw.js VERSION format');
 
 /* كل <script src> و <link href> محلي في صفحات HTML موجود */
-for (const page of readdirSync(ROOT).filter(n => n.endsWith('.html'))) {
+const htmlPages = [...readdirSync(ROOT).filter(n => n.endsWith('.html')), 'admin/index.html'];
+for (const page of htmlPages) {
   const html = readFileSync(join(ROOT, page), 'utf8');
+  const dir = join(ROOT, page, '..');
   for (const m of html.matchAll(/(?:src|href)="([^"#?]+)"/g)) {
     const ref = m[1];
     if (/^(https?:|mailto:|data:)/.test(ref) || ref === '/') continue;
-    if (/\.(js|css|svg|webmanifest|png)$/.test(ref)) ok(existsSync(join(ROOT, ref)), `${page}: missing ${ref}`);
+    if (/\.(js|css|svg|webmanifest|png)$/.test(ref)) ok(existsSync(join(dir, ref)), `${page}: missing ${ref}`);
   }
+  ok(!/<script>[\s\S]*?<\/script>/.test(html), `${page}: inline <script> breaks CSP`);
 }
+ok(/noindex/.test(readFileSync(join(ROOT, 'admin/index.html'), 'utf8')), 'admin has noindex');
+for (const page of readdirSync(ROOT).filter(n => n.endsWith('.html'))) ok(!/admin\//.test(readFileSync(join(ROOT, page), 'utf8')), `${page}: no link to admin`);
 
 /* ---------- 3) unit tests ---------- */
 function makeContext() {
@@ -58,7 +63,7 @@ function makeContext() {
   };
   // Object.keys(localStorage) في المتصفح بيرجع المفاتيح
   const lsProxy = new Proxy(localStorage, { ownKeys: () => [...mem.keys()], getOwnPropertyDescriptor: (t, k) => (mem.has(k) ? { enumerable: true, configurable: true, value: mem.get(k) } : undefined) });
-  const ctx = { console, crypto: webcrypto, localStorage: lsProxy, Intl, setTimeout, clearTimeout, URL, fetch: undefined };
+  const ctx = { console, crypto: webcrypto, TextEncoder, localStorage: lsProxy, Intl, setTimeout, clearTimeout, URL, fetch: undefined };
   ctx.window = ctx; ctx.globalThis = ctx;
   vm.createContext(ctx);
   return ctx;
@@ -67,8 +72,9 @@ function load(ctx, rel) { vm.runInContext(readFileSync(join(ROOT, rel), 'utf8'),
 
 const ctx = makeContext();
 ['firebase-config.js', 'js/core/core.js', 'js/core/config.js', 'js/core/i18n.js', 'js/core/money.js', 'js/core/validate.js',
-  'js/core/db.js', 'js/core/db-demo.js', 'js/core/db-firebase.js', 'data/demo-data.js',
-  'js/services/governorates.js', 'js/services/settings.js', 'js/services/catalog.js', 'js/services/images.js'
+  'js/core/db.js', 'js/core/db-demo.js', 'js/core/db-firebase.js', 'js/core/auth.js', 'data/demo-data.js',
+  'js/services/governorates.js', 'js/services/settings.js', 'js/services/catalog.js', 'js/services/images.js',
+  'js/services/addresses.js', 'js/services/audit.js'
 ].forEach(f => load(ctx, f));
 const App = ctx.App;
 
@@ -152,6 +158,66 @@ eq(Object.fromEntries(Object.entries(F.encode(sample).mapValue.fields).map(([k, 
 eq(F.decode({ timestampValue: '2025-01-02T03:04:05Z' }), '2025-01-02T03:04:05.000Z', 'REST timestamp');
 const sq = F.structuredQuery('products', { where: [['categoryId', '==', 'men'], ['price', '<', 500]], orderBy: ['price', 'desc'], limit: 5 });
 eq([sq.from[0].collectionId, sq.where.compositeFilter.filters.length, sq.orderBy[0].direction, sq.limit], ['products', 2, 'DESCENDING', 5], 'structuredQuery');
+
+/* ---------- الدخول (وضع تجريبي) ---------- */
+const A = App.auth;
+eq(await A.init(), null, 'auth: signed out at start');
+const rejects = async (fn, code, msg) => { try { await fn(); ok(false, msg + ' (no error)'); } catch (e) { eq(e.code || e.message, code, msg); } };
+await rejects(() => A.register({ name: 'Ali', email: 'bad', phone: '01012345678', password: '12345678' }), 'auth/invalid-email', 'register bad email');
+await rejects(() => A.register({ name: 'Ali', email: 'ali@test.com', phone: '01012345678', password: '123' }), 'auth/weak-password', 'register weak pw');
+await rejects(() => A.register({ name: '', email: 'ali@test.com', phone: '01012345678', password: '12345678' }), 'auth/invalid-name', 'register no name');
+const u = await A.register({ name: 'Ali', email: 'Ali@Test.com', phone: '+201012345678', password: '12345678' });
+eq([u.email, u.name, u.phone], ['ali@test.com', 'Ali', '01012345678'], 'register creates normalized profile');
+const accounts = App.store.get('auth:demoAccounts');
+ok(accounts['ali@test.com'].hash && !JSON.stringify(accounts).includes('12345678'), 'password stored hashed, not plain');
+await rejects(() => A.register({ name: 'Ali', email: 'ali@test.com', phone: '01012345678', password: '12345678' }), 'auth/email-already-in-use', 'register duplicate');
+await A.logout();
+eq(A.user, null, 'logout');
+await rejects(() => A.login('ali@test.com', 'wrongpass'), 'auth/invalid-credential', 'login wrong password');
+await A.login('ali@test.com', '12345678');
+eq(A.user && A.user.email, 'ali@test.com', 'login ok');
+await rejects(() => A.changePassword('nope', 'abcdefgh'), 'auth/invalid-credential', 'change pw wrong current');
+await A.changePassword('12345678', 'abcdefgh');
+await A.logout();
+await rejects(() => A.login('ali@test.com', '12345678'), 'auth/invalid-credential', 'old pw rejected');
+await A.login('ali@test.com', 'abcdefgh');
+await A.updateProfile({ name: 'Ali Hassan', phone: '01112345678' });
+eq([A.user.name, A.user.phone], ['Ali Hassan', '01112345678'], 'update profile');
+await A.loginGoogle();
+ok(A.needsPhone(), 'google user needs phone');
+
+// العناوين
+const aUid = A.user.uid;
+const addr = { name: 'Ali', phone: '01012345678', governorate: 'cairo', city: 'Nasr City', area: 'Zone 8', street: 'Abbas El Akkad', building: '12' };
+eq(Object.keys(App.addresses.validate(addr)), [], 'address valid');
+eq(Object.keys(App.addresses.validate({ ...addr, phone: '123', governorate: 'mars' })).sort(), ['governorate', 'phone'], 'address invalid fields');
+const a1 = await App.addresses.save(aUid, addr);
+const a2 = await App.addresses.save(aUid, { ...addr, label: 'Work' });
+let alist = await App.addresses.list(aUid);
+eq(alist.map(x => [x.id, !!x.isDefault]), [[a1, true], [a2, false]], 'first address is default');
+await App.addresses.setDefault(aUid, a2);
+alist = await App.addresses.list(aUid);
+eq(alist[0].id, a2, 'setDefault moves default first');
+await App.addresses.remove(aUid, a2);
+alist = await App.addresses.list(aUid);
+eq(alist.map(x => [x.id, !!x.isDefault]), [[a1, true]], 'removing default promotes next');
+
+// الأدمن والصلاحيات
+await A.demoAdmin('customer_support');
+await A.loadAdmin();
+ok(App.can('orders.write') && !App.can('staff.manage') && !App.can('products.write'), 'RBAC: customer support perms');
+await A.demoAdmin('super_admin');
+await A.loadAdmin();
+ok(App.can('staff.manage') && App.can('anything.at.all'), 'RBAC: super admin all');
+await App.db.update('admins', A.user.uid, { active: false });
+eq(await A.loadAdmin(), null, 'inactive admin denied');
+await App.db.update('admins', A.user.uid, { active: true });
+await A.loadAdmin();
+await App.audit.log({ action: 'test', entity: 'roles', entityId: 'x', before: { a: 1 }, after: { a: 2 }, summary: 's' });
+const logs = await App.db.list('auditLogs');
+eq(logs.map(l => [l.by, l.action, l.after.a]), [[A.user.uid, 'test', 2]], 'audit log written');
+await A.logout();
+eq([A.user, A.admin, App.can('staff.manage')], [null, null, false], 'logout clears admin');
 
 /* ---------- 4) سلامة البيانات التجريبية ---------- */
 const D = App.demoData;

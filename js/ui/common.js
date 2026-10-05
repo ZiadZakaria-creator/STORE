@@ -168,7 +168,7 @@
     App.ready(async () => {
       try {
         await App.db.init();
-        await Promise.all([App.loadSettings(), App.catalog.load()]);
+        await Promise.all([App.loadSettings(), App.catalog.load(), App.auth.init()]);
       } catch (e) {
         console.error(e);
         App.toast(App.t('common.error'));
@@ -181,11 +181,12 @@
       App.on('lang', rerender);
       App.on('catalog', rerender);
       App.on('settings', rerender);
+      App.on('auth', rerender);
     });
   };
 
   /* Service worker */
-  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  if ('serviceWorker' in navigator && location.protocol.startsWith('http') && !location.pathname.includes('/admin/')) {
     root.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
   }
 })(window);

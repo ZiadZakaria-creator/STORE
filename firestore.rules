@@ -33,6 +33,36 @@ service cloud.firestore {
     match /sizes/{id}         { allow read: if true; allow write: if can('categories.write'); }
     match /settings/{id}      { allow read: if true; allow write: if can('settings.write'); }
 
+    // تنسيق عمليات كتالوج المدير العام بين النوافذ، بدون بيانات عامة.
+    match /catalogControl/{id} {
+      allow get: if isSuperAdmin() && id == 'main';
+      allow list, delete: if false;
+      allow create: if isSuperAdmin() && id == 'main'
+        && onlyKeys(request.resource.data, ['revision', 'updatedAt'])
+        && request.resource.data.revision == 1 && request.resource.data.updatedAt == request.time;
+      allow update: if isSuperAdmin() && id == 'main'
+        && onlyKeys(request.resource.data, ['revision', 'updatedAt'])
+        && request.resource.data.revision is int
+        && request.resource.data.revision == resource.data.revision + 1
+        && request.resource.data.updatedAt == request.time;
+    }
+    match /inventoryLogs/{id} {
+      allow read: if can('inventory.write') || can('products.write');
+      allow create: if isSuperAdmin()
+        && onlyKeys(request.resource.data, ['productId','sku','delta','reason','orderId','by','at'])
+        && str(request.resource.data.productId, 1, 100)
+        && str(request.resource.data.sku, 2, 90)
+        && str(request.resource.data.reason, 3, 200)
+        && request.resource.data.by == request.auth.uid
+        && request.resource.data.at == request.time
+        && request.resource.data.orderId == null
+        && onlyKeys(request.resource.data.delta, ['stock','reserved','sold'])
+        && request.resource.data.delta.stock is int
+        && request.resource.data.delta.reserved == 0
+        && request.resource.data.delta.sold == 0;
+      allow update, delete: if false;
+    }
+
     /* ---------- العملاء ---------- */
     match /users/{uid} {
       allow read: if isOwner(uid) || can('customers.read') || can('staff.manage') || can('orders.read');

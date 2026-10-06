@@ -6,7 +6,7 @@
 - **التصميم الكامل:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - **قواعد الشغل:** [`AGENTS.md`](AGENTS.md).
 
-> الحالة: **المرحلة 2 خلصت + Firebase الحقيقي جاهز** (rules متجربة على الـ Emulator). الخطوات اللي هتعملها بإيدك في [`FIREBASE_SETUP.md`](FIREBASE_SETUP.md)، والتسليم للي هيكمل في [`docs/HANDOFF.md`](docs/HANDOFF.md).
+> الحالة: **المرحلة 3 خلصت — مطلوب نشر قواعد Firebase الجديدة** (rules متجربة على الـ Emulator). الخطوات اللي هتعملها بإيدك في [`FIREBASE_SETUP.md`](FIREBASE_SETUP.md)، والتسليم للي هيكمل في [`docs/HANDOFF.md`](docs/HANDOFF.md).
 
 ## التشغيل محلياً
 مش محتاج تسطّب أي حاجة:
@@ -28,14 +28,15 @@ python3 -m http.server 8080
 
 علشان ترجّع البيانات التجريبية لأولها: افتح الـ console واكتب `App.DemoAdapter.reset()`.
 
-**تجربة اللوحة في الوضع التجريبي:** افتح `/admin/` واختار دور (مدير عام، أو مدير المتجر، أو ...). مفيش باسورد في الوضع ده، والهدف إنك تجرب الفرق في الصلاحيات.
+**تجربة اللوحة في الوضع التجريبي:** افتح `/admin/` واختار مدير عام. مفيش باسورد في الوضع التجريبي؛ اللوحة مخصصة لصاحب المتجر فقط.
 
 ## الحسابات والصلاحيات
 - **العملاء:** إيميل وباسورد، أو Google. بيعملوا كده من `account.html` (تسجيل، ودخول، ونسيت الباسورد، وتغيير الباسورد، والبروفايل، والعناوين).
 - **الأدمن:** `admins/{uid}` فيه `role`، و `roles/{id}` فيه `permissions[]`، و `firestore.rules` بتتحقق منهم.
 - **أول مدير عام:** بيتعمل بإيدك من Firebase Console، والخطوات في `FIREBASE_SETUP.md` (الخطوة 8). بعد كده بتعمل الآتي من اللوحة:
   - **تجهيز المتجر:** الأدوار، والأقسام، والألوان، والمقاسات، والإعدادات.
-  - **الموظفين والأدوار:** إضافة باقي الموظفين.
+  - **المنتجات والأقسام والمخزون:** إدارة الصور والتركيبات والكميات وسجل الحركات.
+  - **الإعدادات:** اسم المتجر والواتساب وأسعار الشحن لكل محافظة وحد المخزون القليل.
 
 ## الفحص قبل كل commit
 ```bash
@@ -60,18 +61,18 @@ NODE_PATH=$(npm root -g) node tests/smoke.mjs          # Playwright: موباي�
 index.html, 404.html, sw.js, manifest.webmanifest, firebase-config.js
 assets/css/   tokens.css (الألوان والمسافات) · base.css · components.css · store.css
 js/core/      core · config · i18n · money · validate · db (+ db-demo, db-firebase) · auth
-js/services/  catalog · settings · images · governorates · addresses · audit
+js/services/  catalog · catalog-admin · settings · settings-admin · images · governorates · addresses · audit
 js/ui/        common (هيدر/فوتر) · product-card · forms · icons
 js/pages/     home · account · notfound
 data/         demo-data.js (للوضع التجريبي بس)
-admin/        لوحة التحكم: admin.js (الدخول والراوتر) · admin-ui · overview · staff · audit · setup
+admin/        لوحة التحكم: admin.js (الدخول والراوتر) · admin-ui · overview · products · categories · catalog-meta · inventory · settings · audit · setup
 firestore.rules, firestore.indexes.json, firebase.json, FIREBASE_SETUP.md
 tools/        check.mjs
 tests/        smoke.mjs (تجريبي) · rules.test.mjs · live-emulator.mjs (Firebase Emulator)
 ```
 
 ## اللي لسه جاي
-المنتجات والمخزون، والمتجر الكامل، والسلة، والـ checkout، والطلبات، والدفع، والشحن، ولوحة التحكم، والتقارير، والكوبونات، والتقييمات، و SEO. التفاصيل في `docs/HANDOFF.md`. وفي آخر مرحلة هيتضاف لـ README:
+واجهة المتجر الكاملة، والسلة، والـ checkout، والطلبات، والدفع، والشحن، ولوحة التحكم، والتقارير، والكوبونات، والتقييمات، و SEO. التفاصيل في `docs/HANDOFF.md`. وفي آخر مرحلة هيتضاف لـ README:
 - إعداد الدفع.
 - ربط شركات الشحن.
 - إنشاء حساب الأدمن.

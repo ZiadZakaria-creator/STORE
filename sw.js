@@ -1,5 +1,5 @@
 /* sw.js — PWA. زوّد VERSION مع كل تغيير في الملفات علشان العملاء ياخدوا النسخة الجديدة. */
-const VERSION = 'v5';
+const VERSION = 'v10';
 const CACHE = 'store-' + VERSION;
 
 const CORE = [
@@ -11,6 +11,7 @@ const CORE = [
   'data/demo-data.js',
   'js/services/governorates.js', 'js/services/settings.js', 'js/services/catalog.js', 'js/services/images.js', 'js/services/addresses.js',
   'js/ui/icons.js', 'js/ui/common.js', 'js/ui/product-card.js', 'js/ui/forms.js',
+  'js/services/catalog-admin.js', 'js/services/settings-admin.js',
   'js/pages/home.js', 'js/pages/account.js', 'js/pages/notfound.js'
 ];
 

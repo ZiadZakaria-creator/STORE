@@ -67,6 +67,7 @@
 
   const withId = (id, d) => (d ? Object.assign({ id }, App.clone(d)) : null);
 
+  let transactionQueue = Promise.resolve();
   const Demo = {
     name: 'demo',
     init() {
@@ -130,16 +131,33 @@
     },
     // localStorage متزامن، فالـ transaction بتتنفذ مرة واحدة: القراءات الأول وبعدها الكتابات
     async tx(fn) {
-      const writes = [];
-      const t = {
-        get: (path, id) => Demo.get(path, id),
-        set: (path, id, data, opts) => { writes.push(() => Demo.set(path, id, data, opts || {})); },
-        update: (path, id, patch) => { writes.push(() => Demo.update(path, id, patch)); },
-        remove: (path, id) => { writes.push(() => Demo.remove(path, id)); }
+      const run = async () => {
+        const staged = new Map(), originals = new Map();
+        const map = path => {
+          if (!staged.has(path)) { const data = read(path); originals.set(path, App.clone(data)); staged.set(path, App.clone(data)); }
+          return staged.get(path);
+        };
+        const t = {
+          get: async (path, id) => withId(id, map(path)[id]),
+          set: (path, id, data, opts) => { const m = map(path); m[id] = opts?.merge && m[id] ? applyPatch(m[id], data) : resolveDeep(data); },
+          update: (path, id, patch) => { const m = map(path); if (!m[id]) throw new Error('not-found'); m[id] = applyPatch(m[id], patch); },
+          remove: (path, id) => { delete map(path)[id]; }
+        };
+        const result = await fn(t);
+        const saved = [];
+        for (const [path, data] of staged) {
+          if (!App.store.set(KEY(path), data)) {
+            saved.forEach(p => App.store.set(KEY(p), originals.get(p)));
+            throw new Error('localStorage full');
+          }
+          saved.push(path);
+        }
+        saved.forEach(notify);
+        return result;
       };
-      const result = await fn(t);
-      for (const w of writes) await w();
-      return result;
+      const pending = transactionQueue.then(run);
+      transactionQueue = pending.catch(() => {});
+      return pending;
     },
     watch(path, q, cb) {
       const w = { path, fire: () => Demo.list(path, q).then(cb) };

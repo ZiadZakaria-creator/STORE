@@ -95,7 +95,7 @@ await run('account-flow', 'account.html', async p => {
   for (const [k, v] of [['city', '6 October'], ['area', 'Hay 7'], ['street', 'Central Axis'], ['building', '5']]) await p.fill(`[name=${k}]`, v);
   await p.click('form.panel button[type=submit]');
   await p.waitForSelector('.address-card.is-default');
-  await p.screenshot({ path: OUT + 'account-addresses-mobile.png', fullPage: true });
+  await p.evaluate(() => scrollTo(0,0)); await p.screenshot({ path: OUT + 'account-addresses-mobile.png', fullPage: true });
   await p.click('text=تسجيل الخروج');
   await p.waitForSelector('.auth-panel');
   await p.click('.tabs .tab:nth-child(1)');
@@ -124,35 +124,77 @@ await run('account-google', 'account.html', async p => {
   if (await p.isVisible('a[href="#security"]')) { await p.click('a[href="#security"]'); await p.waitForSelector('text=Google'); }
 }, 'desktop');
 
-// اللوحة: دخول كمدير عام ← الموظفين ← تغيير دور ← السجل
-await run('admin-flow', 'admin/index.html', async p => {
-  await p.click('.gate [data-role="customer_support"]');
-  await p.waitForSelector('.side-nav');
-  if (await p.$('a[data-route="staff"]')) throw new Error('customer support should not see staff');
-  await p.click('text=خروج');
+// المرحلة ٣: مدير عام واحد، وإدارة المنتجات والأقسام والمخزون والإعدادات.
+async function stageThree(p, viewport) {
   await p.click('.gate [data-role="super_admin"]');
   await p.waitForSelector('.kpis');
-  await p.screenshot({ path: OUT + 'admin-overview-desktop.png', fullPage: true });
-  await p.click('a[data-route="staff"]');
-  await p.waitForSelector('text=الأدوار والصلاحيات');
-  // الأدمن التاني (customer support) ← محاسب
-  const select = await p.$('tbody tr:has-text("customer.support") select');
-  await select.selectOption('accountant');
-  await p.waitForSelector('.toast');
-  await p.screenshot({ path: OUT + 'admin-staff-desktop.png', fullPage: true });
-  await p.click('a[data-route="audit"]');
-  await p.waitForSelector('text=محاسب');
-  await p.screenshot({ path: OUT + 'admin-audit-desktop.png', fullPage: true });
-}, 'desktop');
+  if (await p.$('a[data-route="staff"]')) throw new Error('Staff management must not be exposed');
+  const go = async route => { await p.evaluate(r => { location.hash = '#/' + r; },route); await p.waitForFunction(r => document.querySelector('.side-nav a[data-route="'+r.split('/')[0]+'"]').getAttribute('aria-current') === 'page',route); };
+  await go('products'); await p.click('a[href="#/products/new"]');
+  await p.waitForSelector('.product-editor');
+  await p.fill('[name=nameAr]','قميص اختبار المرحلة الثالثة'); await p.fill('[name=nameEn]','Stage three shirt');
+  await p.fill('[name=slug]','stage-three-shirt'); await p.fill('[name=sku]','STAGE-UI');
+  await p.selectOption('[name=categoryId]','men');
+  await p.fill('[name=price]','450');
+  const png=await p.evaluate(()=>{const c=document.createElement('canvas');c.width=300;c.height=400;const x=c.getContext('2d');x.fillStyle='#456';x.fillRect(0,0,300,400);return c.toDataURL('image/png').split(',')[1];});
+  await p.setInputFiles('[name=photos]',{name:'test-shirt.png',mimeType:'image/png',buffer:Buffer.from(png,'base64')});
+  await p.waitForSelector('text=الصور اترفعت. احفظ المنتج لإرفاقها.');
+  await p.click('text=إضافة تركيبة');
+  await p.fill('[name=vsku0]','STAGE-UI-BLK-M'); await p.fill('[name=vstock0]','5');
+  await p.check('[name=featured]');
+  await p.evaluate(() => scrollTo(0,0)); await p.screenshot({path:OUT+'stage3-product-editor-'+viewport+'.png',fullPage:true});
+  await p.click('button:has-text("حفظ المنتج")');
+  await p.waitForSelector('tbody tr:has-text("قميص اختبار المرحلة الثالثة")');
+  const stored=await p.evaluate(async()=> (await App.db.list('products')).find(p=>p.slug==='stage-three-shirt'));
+  if(!stored?.images[0].startsWith('fs:'))throw new Error('Image upload not persisted');
+  await p.evaluate(() => scrollTo(0,0)); await p.screenshot({path:OUT+'stage3-products-'+viewport+'.png',fullPage:true});
+  await go('inventory'); await p.waitForSelector('[aria-label="بحث المخزون"]');
+  await p.fill('[aria-label="بحث المخزون"]','STAGE-UI');
+  await p.click('button:has-text("تعديل المخزون")');
+  await p.fill('.modal [name=stock]','9'); await p.fill('.modal [name=reason]','جرد تجريبي');
+  await p.click('.modal button:has-text("حفظ المخزون")'); await p.waitForSelector('.modal',{state:'detached'});
+  const updated=await p.evaluate(async id=>App.db.get('products',id),stored.id);
+  if(updated.variants[0].stock!==9)throw new Error('Inventory was not saved');
+  await p.evaluate(() => scrollTo(0,0)); await p.screenshot({path:OUT+'stage3-inventory-'+viewport+'.png',fullPage:true});
+  await go('categories'); await p.click('button:has-text("إضافة قسم")');
+  await p.fill('.modal [name=nameAr]','قسم اختبار'); await p.fill('.modal [name=slug]','stage-three-category');
+  await p.click('.modal button:has-text("حفظ القسم")'); await p.waitForSelector('tbody tr:has-text("قسم اختبار")');
+  const beforeOrder=await p.evaluate(async()=> (await App.db.list('categories')).find(c=>c.slug==='stage-three-category').order);
+  await p.locator('tbody tr:has-text("قسم اختبار") button[aria-label^="تحريك لأعلى"]').click();
+  await p.waitForFunction(async before => (await App.db.list('categories')).find(c=>c.slug==='stage-three-category').order < before,beforeOrder);
+  await p.evaluate(() => scrollTo(0,0)); await p.screenshot({path:OUT+'stage3-categories-'+viewport+'.png',fullPage:true});
+  await go('catalog-meta'); await p.waitForSelector('button:has-text("إضافة — الألوان")');
+  await p.click('button:has-text("إضافة — الألوان")'); await p.fill('.modal [name=nameAr]','لون اختبار');
+  await p.fill('.modal [name=nameEn]','Test color'); await p.click('.modal button[type=submit]');
+  await p.waitForSelector('tbody tr:has-text("لون اختبار")');
+  await p.evaluate(() => scrollTo(0,0)); await p.screenshot({path:OUT+'stage3-meta-'+viewport+'.png',fullPage:true});
+  await go('settings'); await p.waitForSelector('[name=storeNameAr]');
+  await p.fill('[name=storeNameAr]','متجر اختبار المرحلة الثالثة'); await p.fill('[name=whatsapp]','01012345678');
+  await p.fill('[name=lowStockThreshold]','0'); await p.uncheck('[name=enabled_giza]');
+  await p.fill('[name=price_cairo]','70'); await p.fill('[name=freeShippingOver]','');
+  await p.click('button:has-text("حفظ الإعدادات")');
+  await p.waitForFunction(()=>App.settings.general.whatsapp==='201012345678' && App.settings.inventory.lowStockThreshold===0);
+  if(await p.evaluate(()=>App.settings.shipping.governorates.giza.enabled))throw new Error('Disabled governorate remained enabled');
+  await p.evaluate(() => scrollTo(0,0)); await p.screenshot({path:OUT+'stage3-settings-'+viewport+'.png',fullPage:true});
+  await go('audit'); await p.waitForSelector('text=settings.save');
+  await p.evaluate(() => scrollTo(0,0)); await p.screenshot({path:OUT+'stage3-audit-'+viewport+'.png',fullPage:true});
+  await p.goto(BASE+'index.html',{waitUntil:'load'}); await p.waitForSelector('.card');
+  if(!(await p.textContent('.site-header .logo')).includes('متجر اختبار المرحلة الثالثة'))throw new Error('Updated name missing in storefront');
+  if(!(await p.textContent('body')).includes('قميص اختبار المرحلة الثالثة'))throw new Error('Product not visible in storefront');
+  await p.goto(BASE+'admin/index.html#/products',{waitUntil:'load'});
+  await p.waitForSelector('tbody tr:has-text("قميص اختبار المرحلة الثالثة")');
+  await p.locator('tbody tr:has-text("قميص اختبار المرحلة الثالثة") button:has-text("إخفاء")').click();
+  await p.waitForSelector('tbody tr:has-text("قميص اختبار المرحلة الثالثة") button:has-text("إظهار")');
+  await p.goto(BASE+'index.html',{waitUntil:'load'});await p.waitForSelector('.card');
+  if((await p.textContent('body')).includes('قميص اختبار المرحلة الثالثة'))throw new Error('Hidden product still visible');
+}
+for (const viewport of ['mobile','desktop']) await run('stage3-flow','admin/index.html',p=>stageThree(p,viewport),viewport);
 
-await run('admin-mobile', 'admin/index.html', async p => {
-  await p.click('.gate [data-role="super_admin"]');
-  await p.waitForSelector('.kpis');
-  await p.click('.burger');
-  await p.waitForSelector('.sidebar.open');
-  await p.click('a[data-route="staff"]');
-  await p.waitForSelector('text=الأدوار والصلاحيات');
-}, 'mobile');
+await run('admin-mobile','admin/index.html',async p=>{
+  await p.click('.gate [data-role="super_admin"]');await p.waitForSelector('.kpis');await p.click('.burger');
+  await p.waitForSelector('.sidebar.open');await p.click('a[data-route="settings"]');await p.waitForSelector('[name=storeNameAr]');
+  if(await p.isVisible('.sidebar.open'))throw new Error('Mobile menu did not close');
+},'mobile');
 
 await browser.close();
 console.log(failures ? `${failures} failed` : 'all passed');

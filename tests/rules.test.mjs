@@ -133,6 +133,30 @@ await t('support reads all orders', () => assertSucceeds(getDocs(collection(supp
 await t('unknown collection closed', () => assertFails(getDoc(doc(boss, 'secrets/x'))));
 await t('unknown collection write closed', () => assertFails(setDoc(doc(boss, 'secrets/x'), { a: 1 })));
 
+/* ---------- المرحلة ٣: قفل الكتالوج وسجل المخزون ---------- */
+const movement = () => ({ productId:'p1', sku:'SKU-1', delta:{stock:2,reserved:0,sold:0}, reason:'إضافة مخزون', orderId:null, by:'boss', at:serverTimestamp() });
+await t('boss reads missing catalog control', () => assertSucceeds(getDoc(doc(boss,'catalogControl/main'))));
+await t('anon cannot read catalog control', () => assertFails(getDoc(doc(anon,'catalogControl/main'))));
+await t('customer cannot read catalog control', () => assertFails(getDoc(doc(alice,'catalogControl/main'))));
+await t('boss initializes catalog revision', () => assertSucceeds(setDoc(doc(boss,'catalogControl/main'),{revision:1,updatedAt:serverTimestamp()})));
+await t('boss increments catalog revision', () => assertSucceeds(updateDoc(doc(boss,'catalogControl/main'),{revision:2,updatedAt:serverTimestamp()})));
+await t('stale catalog revision rejected', () => assertFails(updateDoc(doc(boss,'catalogControl/main'),{revision:2,updatedAt:serverTimestamp()})));
+await t('catalog control extra fields rejected', () => assertFails(updateDoc(doc(boss,'catalogControl/main'),{revision:3,updatedAt:serverTimestamp(),extra:true})));
+await t('customer cannot change revision', () => assertFails(updateDoc(doc(alice,'catalogControl/main'),{revision:3,updatedAt:serverTimestamp()})));
+await t('catalog control cannot be deleted', () => assertFails(deleteDoc(doc(boss,'catalogControl/main'))));
+await t('boss records stock movement', () => assertSucceeds(setDoc(doc(boss,'inventoryLogs/m1'),movement())));
+await t('boss reads stock movements', () => assertSucceeds(getDocs(collection(boss,'inventoryLogs'))));
+await t('customer cannot read stock movements', () => assertFails(getDocs(collection(alice,'inventoryLogs'))));
+await t('anon cannot read stock movements', () => assertFails(getDoc(doc(anon,'inventoryLogs/m1'))));
+await t('customer cannot write stock movements', () => assertFails(setDoc(doc(alice,'inventoryLogs/x'),movement())));
+await t('inactive admin cannot write stock movements', () => assertFails(setDoc(doc(fired,'inventoryLogs/x'),movement())));
+await t('movement impersonation rejected', () => assertFails(setDoc(doc(boss,'inventoryLogs/x'),{...movement(),by:'alice'})));
+await t('movement must have integer stock delta', () => assertFails(setDoc(doc(boss,'inventoryLogs/x'),{...movement(),delta:{stock:1.5,reserved:0,sold:0}})));
+await t('movement cannot fake sales', () => assertFails(setDoc(doc(boss,'inventoryLogs/x'),{...movement(),delta:{stock:1,reserved:0,sold:50}})));
+await t('movement additional fields rejected', () => assertFails(setDoc(doc(boss,'inventoryLogs/x'),{...movement(),secret:'x'})));
+await t('movement short reason rejected', () => assertFails(setDoc(doc(boss,'inventoryLogs/x'),{...movement(),reason:''})));
+await t('stock movements are immutable', async () => { await assertFails(updateDoc(doc(boss,'inventoryLogs/m1'),{reason:'changed'})); await assertFails(deleteDoc(doc(boss,'inventoryLogs/m1'))); });
+
 await env.cleanup();
 console.log(`rules: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

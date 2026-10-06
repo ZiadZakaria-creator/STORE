@@ -6,7 +6,7 @@
 
   App.settings = Object.assign({}, App.config.defaults, (App.store.get(CACHE) || {}).data);
 
-  App.loadSettings = async function () {
+  App.loadSettings = async function (force = false) {
     const cached = App.store.get(CACHE);
     const fresh = cached && Date.now() - cached.at < App.config.catalogCacheMs;
     const fetchIt = async () => {
@@ -19,8 +19,8 @@
       App.emit('settings', App.settings);
       return App.settings;
     };
-    if (fresh) return App.settings;
-    if (cached) { fetchIt().catch(e => console.warn('settings refresh', e)); return App.settings; }
+    if (fresh && !force) return App.settings;
+    if (cached && !force) { fetchIt().catch(e => console.warn('settings refresh', e)); return App.settings; }
     return fetchIt();
   };
 

@@ -63,24 +63,16 @@
       App.form.busy(add, true);
       try {
         const { brands, products } = demoCatalog();
-        let n = 0;
-        for (const g of [['brands', brands], ['products', products]]) {
-          for (const d of g[1]) { if (!(await App.db.get(g[0], d.id))) { await App.db.set(g[0], d.id, d.data); n++; } }
-        }
-        await App.audit.log({ action: 'demo.added', entity: 'products', entityId: 'demo', after: { count: n }, summary: `ضاف ${n} منتج/ماركة تجريبية` });
+        const n = await App.catalogAdmin.addDemoCatalog({brands,products});
         done(n ? `اتضاف ${n}` : 'موجودين بالفعل');
       } catch (e) { fail(add, e); }
     });
 
     del.addEventListener('click', async () => {
-      if (!(await App.ui.confirm('امسح كل المنتجات والماركات التجريبية؟ المنتجات اللي إنت ضفتها مش هتتمس.', 'امسح'))) return;
+      if (!(await App.ui.confirm('امسح كل المنتجات والماركات التجريبية؟ المنتجات الحقيقية والماركات المستخدمة فيها مش هتتمس.', 'امسح'))) return;
       App.form.busy(del, true);
       try {
-        let n = 0;
-        for (const path of ['products', 'brands']) {
-          for (const d of await App.db.list(path, { where: [['demo', '==', true]] })) { await App.db.remove(path, d.id); n++; }
-        }
-        await App.audit.log({ action: 'demo.removed', entity: 'products', entityId: 'demo', before: { count: n }, summary: `مسح ${n} منتج/ماركة تجريبية` });
+        const n = await App.catalogAdmin.removeDemoCatalog();
         done(`اتمسح ${n}`);
       } catch (e) { fail(del, e); }
     });
@@ -105,7 +97,7 @@
         App.form.busy(btn, true);
         try {
           for (const g of groups) {
-            for (const d of g.missing) await App.db.set(g.path, d.id, d.data);
+            for (const d of g.missing) await App.catalogAdmin.seedMissing(g.path, d.id, d.data);
             if (g.missing.length) {
               await App.audit.log({ action: 'setup.seeded', entity: g.path, entityId: g.key, after: { count: g.missing.length },
                 summary: `جهّز ${g.label} (${g.missing.length})` });

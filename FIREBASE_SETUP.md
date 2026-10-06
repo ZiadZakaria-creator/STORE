@@ -109,7 +109,7 @@
 
    الزرار ده بيضيف الأدوار الخمسة، والأقسام والأقسام الفرعية، والألوان، والمقاسات، والإعدادات الأساسية. مش بيضيف منتجات ولا أسعار، وكل المحافظات بتبدأ مقفولة لحد ما تحط أسعار الشحن.
 
-خلاص كده المتجر شغال على Firebase. باقي الموظفين بتضيفهم من **اللوحة ← الموظفين والأدوار** بإيميل حسابهم، ومحتاجش ترجع للـ Console تاني.
+اللوحة مخصصة لصاحب المتجر فقط، بحساب مدير عام واحد. مفيش إدارة موظفين في الواجهة.
 
 ---
 
@@ -136,3 +136,9 @@ NODE_PATH=<folder>/node_modules npx firebase emulators:exec --project demo-store
 python3 -m http.server 8080 &
 BASE_URL=http://127.0.0.1:8080/ SDK_DIR=<sdk> NODE_PATH=$(npm root -g) npx firebase emulators:exec --project demo-store --only firestore,auth "node tests/live-emulator.mjs"
 ```
+
+
+## تحديث المرحلة 3 — مطلوب قبل استخدام الإدارة الجديدة
+انسخ محتوى `firestore.rules` بالكامل إلى **Firebase Console ← مشروع store-4cfd5 ← Firestore Database ← Rules ← Publish**.
+القواعد الجديدة تضيف `catalogControl/main` لتنسيق تعديلات الكتالوج و`inventoryLogs` لسجل المخزون الذي لا يقبل التعديل أو الحذف. دفع الكود على GitHub لا ينشر قواعد Firebase.
+بعد النشر افتح `/admin/#/settings` وأدخل الاسم والواتساب وأسعار الشحن الحقيقية، وفعّل المحافظات التي توصل لها فقط. حد المخزون القليل يقبل صفرًا، وترك الشحن المجاني فارغًا يلغيه.

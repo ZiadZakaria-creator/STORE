@@ -84,7 +84,7 @@ ctx.FIREBASE_CONFIG = null;
 ['js/core/core.js', 'js/core/config.js', 'js/core/i18n.js', 'js/core/money.js', 'js/core/validate.js',
   'js/core/db.js', 'js/core/db-demo.js', 'js/core/db-firebase.js', 'js/core/auth.js', 'data/demo-data.js',
   'js/services/governorates.js', 'js/services/settings.js', 'js/services/catalog.js', 'js/services/images.js',
-  'js/services/addresses.js', 'js/services/audit.js'
+  'js/services/addresses.js', 'js/services/audit.js', 'js/services/catalog-admin.js', 'js/services/settings-admin.js'
 ].forEach(f => load(ctx, f));
 const App = ctx.App;
 
@@ -228,6 +228,59 @@ const logs = await App.db.list('auditLogs');
 eq(logs.map(l => [l.by, l.action, l.after.a]), [[A.user.uid, 'test', 2]], 'audit log written');
 await A.logout();
 eq([A.user, A.admin, App.can('staff.manage')], [null, null, false], 'logout clears admin');
+
+/* ---------- المرحلة ٣: الكتالوج والمخزون والإعدادات ---------- */
+await A.demoAdmin('super_admin'); await A.loadAdmin();
+const sampleProduct = App.clone(prods[0]);
+const created = {...sampleProduct,id:undefined,slug:'stage-three-test',sku:'STAGE-THREE',name:{ar:'منتج اختبار',en:'Test'},variants:[{...sampleProduct.variants[0],sku:'STAGE-THREE-BLK-M',stock:4,reserved:0,sold:0}],ratingCount:0,ratingAvg:0,soldCount:0};
+const pid = await App.catalogAdmin.saveProduct(created);
+let saved = await App.db.get('products',pid);
+eq([saved.ratingCount,saved.ratingAvg,saved.soldCount],[0,0,0],'new products do not inherit fake sales or reviews');
+eq(saved.variants[0].stock,4,'save product stock');
+const rejectMessage = async (fn, re, label) => { try { await fn(); ok(false,label); } catch(e) { ok(re.test(e.message),label+': '+e.message); } };
+await rejectMessage(()=>App.catalogAdmin.saveProduct({...created,sku:'OTHER'}),/مستخدم/,'duplicate slug rejected');
+await rejectMessage(()=>App.catalogAdmin.saveProduct({...created,slug:'another-product',sku:'OTHER'}),/مستخدم/,'duplicate variant SKU rejected');
+await rejectMessage(()=>App.catalogAdmin.saveProduct({...saved,salePrice:saved.price+1}),/سعر/,'invalid discount rejected');
+await App.catalogAdmin.setStock(pid,saved.variants[0].sku,8,'جرد اختبار',4);
+await rejectMessage(()=>App.catalogAdmin.setStock(pid,saved.variants[0].sku,10,'جرد قديم',4),/اتغير/,'stale stock rejected');
+await rejectMessage(()=>App.catalogAdmin.saveProduct({...saved,name:{ar:'تعديل قديم',en:''}}),/اتغيرت/,'stale product editor rejected');
+saved = await App.db.get('products',pid);
+await App.catalogAdmin.saveProduct({...saved,hidden:true});
+ok(!App.catalog.products.some(p=>p.id===pid),'hidden product excluded from storefront cache');
+const copyId=await App.catalogAdmin.duplicateProduct(pid);
+const copied=await App.db.get('products',copyId);
+eq([copied.hidden,copied.variants[0].stock,copied.variants[0].reserved,copied.variants[0].sold],[true,0,0,0],'duplicate starts hidden with no inventory or sales');
+await App.catalogAdmin.removeProduct(copyId);
+const same=await Promise.allSettled([0,1].map(()=>App.catalogAdmin.saveProduct({...created,slug:'parallel-product',sku:'PARALLEL',variants:[{...created.variants[0],sku:'PARALLEL-V'}]})));
+eq(same.filter(r=>r.status==='fulfilled').length,1,'concurrent catalog writes cannot duplicate slug/SKU');
+for(const r of same)if(r.status==='fulfilled')await App.catalogAdmin.removeProduct(r.value);
+const c1=await App.catalogAdmin.saveMeta('categories',{name:{ar:'اختبار',en:'Test'},slug:'test-cat'});
+const c2=await App.catalogAdmin.saveMeta('categories',{name:{ar:'فرعي',en:'Sub'},slug:'test-sub',parentId:c1});
+await rejectMessage(async()=>App.catalogAdmin.saveMeta('categories',{...(await App.db.get('categories',c1)),parentId:c2}),/تابع لنفسه/,'category cycle rejected');
+await rejectMessage(()=>App.catalogAdmin.removeMeta('categories',c1),/فرعية/,'parent with children cannot be deleted');
+await rejectMessage(()=>App.catalogAdmin.removeMeta('colors',sampleProduct.variants[0].color),/مستخدم/,'referenced color cannot be deleted');
+await App.catalogAdmin.removeMeta('categories',c2); await App.catalogAdmin.removeMeta('categories',c1);
+const oldSettings=App.clone(App.settings);
+const settingInput={storeName:{ar:'متجر اختبار',en:'Test shop'},whatsapp:'+201012345678',lowStockThreshold:0,freeShippingOver:'',etaMin:2,etaMax:5,governorates:{cairo:{enabled:true,price:65}}};
+await App.saveStoreSettings(settingInput);
+eq([App.settings.general.whatsapp,App.settings.inventory.lowStockThreshold,App.settings.shipping.freeShippingOver],['201012345678',0,null],'settings normalize phone, preserve zero threshold and disabled free shipping');
+eq(Object.values(App.settings.shipping.governorates).filter(g=>g.enabled).length,1,'only explicitly enabled governorates deliver');
+await rejectMessage(()=>App.saveStoreSettings(settingInput),/اتغيرت/,'stale settings form rejected');
+await rejectMessage(()=>App.saveStoreSettings({...settingInput,whatsapp:'123'}),/واتساب/,'invalid whatsapp rejected');
+ok((await App.db.list('inventoryLogs')).some(l=>l.productId===pid&&l.delta.stock===4),'inventory movements persisted');
+ok((await App.db.list('auditLogs')).some(l=>l.action==='settings.save'),'settings audit recorded');
+await App.db.update('brands',saved.brandId,{demo:true});
+await App.db.update('products',pid,{demo:false});
+const demoBrand=saved.brandId;
+await App.catalogAdmin.removeDemoCatalog();
+ok(!!await App.db.get('products',pid),'demo cleanup preserves real products');
+ok(!!await App.db.get('brands',demoBrand),'demo cleanup preserves brands referenced by real products');
+const beforeSeed=await App.db.get('products',pid);
+eq(await App.catalogAdmin.seedMissing('products',pid,{name:{ar:'replacement'}}),false,'setup never overwrites existing products');
+eq((await App.db.get('products',pid)).name,beforeSeed.name,'existing product unchanged by setup');
+await App.catalogAdmin.removeProduct(pid);
+await A.logout();
+await rejectMessage(()=>App.catalogAdmin.saveProduct(created),/للمدير العام/,'signed out catalog write denied');
 
 /* ---------- 4) سلامة البيانات التجريبية ---------- */
 const D = App.demoData;

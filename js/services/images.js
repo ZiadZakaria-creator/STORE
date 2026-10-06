@@ -42,6 +42,33 @@
 
   const fsCache = {};
   App.img = {
+    async upload(file) {
+      App.catalogAdmin.requireAdmin('products.write');
+      if (!file || !['image/jpeg','image/png','image/webp'].includes(file.type) || file.size > 10 * 1024 * 1024) throw new Error('اختار صورة JPG أو PNG أو WebP أقل من ١٠ ميجا.');
+      const bitmap = await createImageBitmap(file);
+      try {
+        const canvas = document.createElement('canvas');
+        let scale = Math.min(1, 1200 / Math.max(bitmap.width, bitmap.height));
+        let data = '';
+        for (let attempt = 0; attempt < 8; attempt++) {
+          canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+          canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+          data = canvas.toDataURL('image/webp', Math.max(.45, .85 - attempt * .06));
+          if (data.length <= 200000) break;
+          scale *= .8;
+        }
+        if (data.length > 200000) throw new Error('الصورة كبيرة بعد التصغير؛ اختار صورة أصغر.');
+        const id = App.randomId();
+        await App.db.tx(async t => {
+          t.set('productImages', id, { data, width:canvas.width, height:canvas.height, createdAt:App.db.now(), by:App.auth.user.uid });
+          await App.audit.log({action:'image.upload',entity:'productImages',entityId:id,after:{width:canvas.width,height:canvas.height}}, t);
+        });
+        fsCache[id] = data;
+        return 'fs:' + id;
+      } finally { bitmap.close(); }
+    },
     placeholder,
     isPlaceholder: ref => typeof ref === 'string' && ref.startsWith('ph:'),
     // للصور اللي محتاجة تتقري من Firestore بيرجع null، واستخدم App.img.load
@@ -63,7 +90,7 @@
     apply(imgEl, ref) {
       const s = App.img.src(ref);
       if (s) { imgEl.src = s; return; }
-      App.img.load(ref).then(u => { imgEl.src = u; });
+      App.img.load(ref).then(u => { imgEl.src = u; }).catch(() => { imgEl.src = placeholder('tshirt', 'GRY'); });
     }
   };
 })(typeof window !== 'undefined' ? window : globalThis);

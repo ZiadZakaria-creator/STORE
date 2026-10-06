@@ -40,7 +40,7 @@ async function uidOf(email) {
 }
 
 // الصفحة بتكلم الـ Emulator على 127.0.0.1، فبنقفل حماية الشبكة المحلية في Chrome للاختبار ده بس
-const browser = await chromium.launch({ args: ['--disable-features=LocalNetworkAccessChecks,PrivateNetworkAccessSendPreflights,PrivateNetworkAccessRespectPreflightResults,BlockInsecurePrivateNetworkRequests'] });
+const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--disable-features=LocalNetworkAccessChecks,PrivateNetworkAccessSendPreflights,PrivateNetworkAccessRespectPreflightResults,BlockInsecurePrivateNetworkRequests'] });
 let passed = 0, failed = 0;
 const errorsByPage = [];
 const pages = [];
@@ -198,33 +198,37 @@ await step('profile update and password change', async () => {
   await p.waitForSelector('text=الباسورد اتغير', { timeout: 15000 });
 });
 
-await step('owner adds Sara as customer support (and it is audited)', async () => {
-  const p = A.page;
-  await p.goto(BASE + 'admin/index.html#/staff');
-  await p.waitForSelector('text=+ إضافة أدمن', { timeout: 15000 });
-  await p.click('text=+ إضافة أدمن');
-  await p.fill('.modal [name=email]', 'sara@shop.test');
-  await p.selectOption('.modal [name=role]', 'customer_support');
-  await p.click('.modal-foot .btn-primary');
-  await p.waitForSelector('tbody >> text=sara@shop.test', { timeout: 15000 });
-  await p.goto(BASE + 'admin/index.html#/audit');
-  await p.waitForSelector('text=sara@shop.test', { timeout: 15000 });
-  await p.screenshot({ path: OUT + 'live-admin-audit.png', fullPage: true });
+await step('single-owner admin has no staff controls', async () => {
+  const p=A.page; await p.goto(BASE+'admin/index.html');await p.waitForSelector('.side-nav',{state:'attached'});
+  if(await p.$('a[data-route="staff"]'))throw new Error('Staff controls are visible');
+  await B.page.goto(BASE+'account.html');
+  await B.page.waitForFunction(()=>!!window.App?.auth);
+  await B.page.evaluate(async()=>{await App.auth.init();await App.auth.logout();await App.auth.login('sara@shop.test','sarapass34');});
+  await B.page.goto(BASE+'admin/index.html');await B.page.waitForSelector('text=مش عنده صلاحية');
 });
 
-await step('Sara signs out, back in with new password, sees limited admin', async () => {
-  const p = B.page;
-  await p.goto(BASE + 'account.html');
-  await p.click('text=تسجيل الخروج');
-  await p.waitForSelector('.auth-panel');
-  await p.fill('[name=email]', 'sara@shop.test');
-  await p.fill('[name=password]', 'sarapass34');
-  await p.click('button[type=submit]');
-  await p.waitForSelector('.account-head', { timeout: 15000 });
-  await p.goto(BASE + 'admin/index.html');
-  await p.waitForSelector('.side-nav', { timeout: 15000 });
-  const routes = await p.$$eval('.side-nav a', a => a.map(x => x.dataset.route));
-  if (routes.includes('staff') || routes.includes('setup') || routes.includes('audit')) throw new Error('support sees: ' + routes.join(','));
+await step('Firestore catalog transaction, image upload, stock audit and settings', async () => {
+  const p=A.page;await p.goto(BASE+'admin/index.html#/products');await p.waitForSelector('text=إضافة منتج');
+  const result=await p.evaluate(async()=>{
+    const canvas=document.createElement('canvas');canvas.width=120;canvas.height=160;canvas.getContext('2d').fillRect(0,0,120,160);
+    const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
+    const image=await App.img.upload(new File([blob],'test.png',{type:'image/png'}));
+    const sample=App.clone(App.demoData.products[0]);
+    const product={...sample,id:undefined,brandId:'',slug:'live-stage3-shirt',sku:'LIVE-STAGE3',images:[image],variants:[{...sample.variants[0],sku:'LIVE-STAGE3-V',stock:6,reserved:0,sold:0}]};
+    const id=await App.catalogAdmin.saveProduct(product);
+    await App.catalogAdmin.setStock(id,'LIVE-STAGE3-V',9,'جرد على المحاكي',6);
+    let staleRejected=false;
+    try{await App.catalogAdmin.setStock(id,'LIVE-STAGE3-V',2,'جرد قديم',6);}catch(e){staleRejected=/اتغير/.test(e.message);}
+    const row=await App.db.get('products',id);
+    const logs=await App.db.list('inventoryLogs');
+    await App.loadSettings(true);
+    const settings=App.settings;
+    await App.saveStoreSettings({storeName:{ar:'متجر المحاكي',en:'Emulated store'},whatsapp:'01012345678',lowStockThreshold:0,freeShippingOver:'',etaMin:2,etaMax:4,governorates:{cairo:{enabled:true,price:80}},revisions:Object.fromEntries(['general','shipping','inventory'].map(k=>[k,settings[k]?.revision||0]))});
+    return {stock:row.variants[0].stock,staleRejected,logs:logs.filter(log=>log.productId===id).length,threshold:App.settings.inventory.lowStockThreshold,image};
+  });
+  if(result.stock!==9||!result.staleRejected||result.logs!==2||result.threshold!==0||!result.image.startsWith('fs:'))throw new Error(JSON.stringify(result));
+  await p.goto(BASE+'admin/index.html#/inventory');await p.waitForSelector('text=LIVE-STAGE3-V');
+  await p.screenshot({path:OUT+'live-stage3-inventory.png',fullPage:true});
 });
 
 await step('wrong password shows an error', async () => {

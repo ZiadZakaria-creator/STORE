@@ -6,6 +6,21 @@
 
   const ui = App.ui = {};
 
+  ui.action = async (button, work, error) => {
+    if (button?.disabled) return false;
+    if (button) App.form.busy(button, true);
+    if (error) error.textContent = '';
+    try { await work(); return true; }
+    catch (e) {
+      const message = /permission|insufficient/i.test(e.message || '') ? 'تعذر الحفظ: راجع صلاحية المدير العام وانشر قواعد Firestore الجديدة.' : (e.message || 'تعذر الحفظ.');
+      if (error) { error.className = 'alert alert-error'; error.textContent = message; } else App.toast(message);
+      return false;
+    } finally { if (button?.isConnected) App.form.busy(button, false); }
+  };
+  ui.check = (name, label, checked = false) => {
+    const input = h('input', {type:'checkbox',name}); input.checked = checked;
+    return h('label',{class:'check-field'},[input, h('span',{text:label})]);
+  };
   ui.date = (iso, withTime = true) => {
     if (!iso) return '—';
     const d = new Date(iso);

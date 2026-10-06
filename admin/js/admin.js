@@ -51,13 +51,13 @@
     if (App.config.isDemo) {
       // الوضع التجريبي: دخول بدور معين علشان تجرب الصلاحيات، من غير باسورد
       demo = h('div', { class: 'demo-roles' }, [
-        h('div', { class: 'divider', text: 'وضع تجريبي: ادخل بدور' }),
-        ...App.demoData.roles.map(r => h('button', { class: 'btn btn-outline btn-block', type: 'button', 'data-role': r.id, text: App.tx(r.name),
+        h('div', { class: 'divider', text: 'وضع تجريبي: دخول المدير العام' }),
+        ...App.demoData.roles.filter(r => r.id === 'super_admin').map(r => h('button', { class: 'btn btn-outline btn-block', type: 'button', 'data-role': r.id, text: App.tx(r.name),
           onclick: async () => { await App.auth.demoAdmin(r.id); boot(); } }))
       ]);
     }
 
-    const signedInNotAdmin = App.auth.user && !App.auth.admin;
+    const signedInNotAdmin = App.auth.user && App.auth.admin?.role !== 'super_admin';
     document.body.textContent = '';
     document.body.append(h('main', { class: 'gate' }, h('div', { class: 'panel' }, [
       h('h1', { text: 'لوحة التحكم' }),
@@ -139,7 +139,7 @@
     try {
       const box = h('div', { style: 'display:grid;gap:24px' });
       await route.render(box, rest.join('/'));
-      if (current === route) { el.textContent = ''; el.append(box); }
+      if (current === route) { el.textContent = ''; el.append(box); root.scrollTo(0, 0); }
     } catch (e) {
       console.error(e);
       el.textContent = '';
@@ -147,6 +147,12 @@
     }
   }
 
+  App.on('inventory', refreshBadges);
+  App.on('settings', () => {
+    const brand = App.$('.sidebar-brand');
+    if (brand) { brand.textContent = App.storeName(); brand.append(h('small',{text:'لوحة التحكم'})); }
+    refreshBadges();
+  });
   let hashHandler = null;
   async function boot() {
     // اللوحة عربي دايماً
@@ -156,7 +162,7 @@
     await Promise.all([App.loadSettings(), App.auth.init()]);
     if (!App.auth.user) return gate();
     await App.auth.loadAdmin();
-    if (!App.auth.admin) return gate();
+    if (App.auth.admin?.role !== 'super_admin') return gate();
     const allowed = shell();
     if (hashHandler) root.removeEventListener('hashchange', hashHandler);
     hashHandler = () => navigate(allowed);

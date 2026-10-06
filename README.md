@@ -6,7 +6,7 @@
 - **التصميم الكامل:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - **قواعد الشغل:** [`AGENTS.md`](AGENTS.md).
 
-> الحالة: **المرحلة 3 خلصت — مطلوب نشر قواعد Firebase الجديدة** (rules متجربة على الـ Emulator). الخطوات اللي هتعملها بإيدك في [`FIREBASE_SETUP.md`](FIREBASE_SETUP.md)، والتسليم للي هيكمل في [`docs/HANDOFF.md`](docs/HANDOFF.md).
+> الحالة: **المرحلة 4 خلصت — واجهة المتجر والمفضلة جاهزين، وقواعد المرحلة 3 منشورة حسب تأكيد صاحب المتجر** (rules متجربة على الـ Emulator). الخطوات اللي هتعملها بإيدك في [`FIREBASE_SETUP.md`](FIREBASE_SETUP.md)، والتسليم للي هيكمل في [`docs/HANDOFF.md`](docs/HANDOFF.md).
 
 ## التشغيل محلياً
 مش محتاج تسطّب أي حاجة:
@@ -61,9 +61,9 @@ NODE_PATH=$(npm root -g) node tests/smoke.mjs          # Playwright: موباي�
 index.html, 404.html, sw.js, manifest.webmanifest, firebase-config.js
 assets/css/   tokens.css (الألوان والمسافات) · base.css · components.css · store.css
 js/core/      core · config · i18n · money · validate · db (+ db-demo, db-firebase) · auth
-js/services/  catalog · catalog-admin · settings · settings-admin · images · governorates · addresses · audit
+js/services/  catalog · storefront · wishlist · catalog-admin · settings · settings-admin · images · governorates · addresses · audit
 js/ui/        common (هيدر/فوتر) · product-card · forms · icons
-js/pages/     home · account · notfound
+js/pages/     home · shop · product · wishlist · account · notfound
 data/         demo-data.js (للوضع التجريبي بس)
 admin/        لوحة التحكم: admin.js (الدخول والراوتر) · admin-ui · overview · products · categories · catalog-meta · inventory · settings · audit · setup
 firestore.rules, firestore.indexes.json, firebase.json, FIREBASE_SETUP.md
@@ -72,8 +72,17 @@ tests/        smoke.mjs (تجريبي) · rules.test.mjs · live-emulator.mjs (F
 ```
 
 ## اللي لسه جاي
-واجهة المتجر الكاملة، والسلة، والـ checkout، والطلبات، والدفع، والشحن، ولوحة التحكم، والتقارير، والكوبونات، والتقييمات، و SEO. التفاصيل في `docs/HANDOFF.md`. وفي آخر مرحلة هيتضاف لـ README:
+السلة، والـ checkout، والطلبات، والدفع، والشحن، ولوحة التحكم، والتقارير، والكوبونات، والتقييمات، و SEO. التفاصيل في `docs/HANDOFF.md`. وفي آخر مرحلة هيتضاف لـ README:
 - إعداد الدفع.
 - ربط شركات الشحن.
 - إنشاء حساب الأدمن.
 - خطوات النشر بالتفصيل.
+
+
+## صفحات المتجر الحالية
+- `shop.html`: البحث والفلاتر والترتيب وصفحات النتائج.
+- `product.html?slug=...`: الصور والألوان والمقاسات والسعر والمخزون المتاح.
+- `wishlist.html`: مفضلة للزائر والحساب.
+- تفاصيل التحقق: [`docs/STAGE4-VALIDATION.md`](docs/STAGE4-VALIDATION.md).
+
+السلة والدفع والطلبات مراحل لاحقة؛ المرحلة الحالية لا تتيح إتمام شراء.

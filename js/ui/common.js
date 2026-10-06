@@ -158,8 +158,10 @@
 
   App.renderChrome = function () {
     App.$$('.overlay, .drawer').forEach(n => n.remove());
+    document.body.style.overflow = '';
     renderHeader();
     renderFooter();
+    App.paintWishlist?.();
     document.title = document.title.replace(/\{store\}/g, App.storeName());
   };
 
@@ -169,6 +171,7 @@
       try {
         await App.db.init();
         await Promise.all([App.loadSettings(), App.catalog.load(), App.auth.init()]);
+        if (App.wishlist) await App.wishlist.init().catch(() => App.toast(App.t('wish.syncError')));
       } catch (e) {
         console.error(e);
         App.toast(App.t('common.error'));

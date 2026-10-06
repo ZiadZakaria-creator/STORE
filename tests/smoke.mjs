@@ -196,6 +196,87 @@ await run('admin-mobile','admin/index.html',async p=>{
   if(await p.isVisible('.sidebar.open'))throw new Error('Mobile menu did not close');
 },'mobile');
 
+// المرحلة ٤: تصفح فعلي، فلاتر وروابط، واختيارات التركيبة والمفضلة.
+async function stageFourFlow(p,vp) {
+  await p.waitForSelector('.shop-results .card');
+  const count=await p.locator('.shop-results .card').count();if(count!==12)throw new Error('Expected 12 initial products');
+  await p.evaluate(()=>scrollTo(0,0));await p.screenshot({path:OUT+`stage4-shop-${vp}.png`,fullPage:true});
+  if(!await p.locator('.filter-panel').evaluate(e=>e.open))await p.click('.filter-panel summary');
+  await p.fill('.shop-filters [name=q]','oversized');await p.click('.shop-filters button[type=submit]');
+  await p.waitForURL('**/shop.html?q=oversized**');await p.waitForSelector('.shop-results .card');
+  if(await p.locator('.shop-results .card').count()!==1)throw new Error('Search should match one product');
+  await p.click('.card-title a');await p.waitForSelector('.product-layout');
+  await p.locator('[data-color]:not([disabled])').first().click();
+  await p.locator('[data-size]:not([disabled])').first().click();
+  await p.waitForFunction(()=>document.querySelector('.product-sku').textContent.length>0);
+  const selected=await p.evaluate(()=>{
+    const product=App.catalog.product(new URLSearchParams(location.search).get('slug'));
+    const color=document.querySelector('[data-color][aria-pressed=true]').dataset.color;
+    const size=document.querySelector('[data-size][aria-pressed=true]').dataset.size;
+    const v=product.variants.find(v=>v.color===color&&v.size===size);
+    return {price:App.money.format(App.catalog.price(product,v)),available:App.catalog.available(v)};
+  });
+  if(!(await p.textContent('.product-price')).includes(selected.price))throw new Error('Wrong variant price');
+  if(!(await p.textContent('.product-stock')).includes(String(selected.available)))throw new Error('Wrong available quantity');
+  await p.locator('.product-thumbs button').last().click();
+  await p.click('.product-image-button');await p.waitForSelector('dialog[open]');await p.keyboard.press('Escape');
+  await p.waitForSelector('dialog',{state:'detached'});
+  await p.click('.product-actions [data-wish]');await p.waitForSelector('.product-actions [aria-pressed="true"]');
+  await p.evaluate(()=>scrollTo(0,0));await p.screenshot({path:OUT+`stage4-product-${vp}.png`,fullPage:true});
+  await p.goto(BASE+'wishlist.html');await p.waitForSelector('.wishlist-grid .card');
+  if(await p.locator('.wishlist-grid .card').count()!==1)throw new Error('Guest wishlist missing');
+  await p.reload();await p.waitForSelector('.wishlist-grid .card');
+  await p.evaluate(()=>scrollTo(0,0));await p.screenshot({path:OUT+`stage4-wishlist-${vp}.png`,fullPage:true});
+  await p.goto(BASE+'account.html');await p.waitForSelector('.auth-panel');await p.click('.tabs .tab:nth-child(2)');
+  await p.fill('[name=name]','Wishlist Customer');await p.fill('[name=email]',`wishlist-${vp}@test.com`);await p.fill('[name=phone]','01012345678');await p.fill('[name=password]','wishlist123');await p.click('button[type=submit]');
+  await p.waitForSelector('.account-head');
+  await p.waitForFunction(async()=>{const profile=await App.db.get('users',App.auth.user.uid);return profile.wishlist.length===1;});
+  await p.goto(BASE+'wishlist.html');await p.waitForSelector('.wishlist-grid .card');
+  await p.click('.wishlist-grid [data-wish]');await p.waitForSelector('.empty');
+  const saved=await p.evaluate(async()=> (await App.db.get('users',App.auth.user.uid)).wishlist);
+  if(saved.length)throw new Error('Account wishlist removal was not saved');
+  await p.goto(BASE+'shop.html?cat=men&stock=1&sort=price-asc');await p.waitForSelector('.shop-results .card');
+  const valid=await p.evaluate(()=>{
+    const ids=[...document.querySelectorAll('.shop-results [data-wish]')].map(b=>b.dataset.wish),rows=ids.map(id=>App.catalog.product(id));
+    return rows.every((row,i)=>App.catalog.inCategory(row,'men')&&App.catalog.inStock(row)&&(!i||App.catalog.priceRange(rows[i-1]).min<=App.catalog.priceRange(row).min));
+  });if(!valid)throw new Error('Category/stock/sort filters incorrect');
+  await p.goto(BASE+'shop.html?q=zz-no-results');await p.waitForSelector('.empty');
+  if(await p.locator('.shop-results .card').count())throw new Error('Empty search returned cards');
+  await p.goto(BASE+'product.html?slug=not-a-product');await p.waitForSelector('.notfound');
+  await p.evaluate(()=>scrollTo(0,0));await p.screenshot({path:OUT+`stage4-missing-${vp}.png`,fullPage:true});
+}
+for(const vp of ['mobile','desktop'])await run('stage4-flow','shop.html',p=>stageFourFlow(p,vp),vp);
+for(const vp of ['mobile','desktop'])await run('stage4-english-dark','shop.html?sort=price-desc',async p=>{
+  await p.waitForSelector('.shop-results .card');
+  if(await p.textContent('h1')!=='Shop all')throw new Error('Shop translation missing');
+  await p.click('.shop-results .card-title a');await p.waitForSelector('.product-layout');
+  if(await p.textContent('.product-description h2')!=='Product details')throw new Error('Product translation missing');
+},vp,{lang:'en',dark:true});
+
+for(const vp of ['mobile','desktop'])await run('stage4-edge','shop.html',async p=>{
+  await p.waitForSelector('.shop-results .card');
+  const soldOut=await p.evaluate(()=>App.catalog.products.find(p=>!App.catalog.inStock(p)).slug);
+  await p.goto(BASE+'product.html?slug='+soldOut);await p.waitForSelector('.product-layout');
+  if(await p.locator('.variant-option:not([disabled])').count())throw new Error('Sold-out product has selectable variants');
+  if(await p.textContent('.product-stock')!=='نفد')throw new Error('Sold-out status missing');
+  await p.screenshot({path:OUT+`stage4-soldout-${vp}.png`,fullPage:true});
+  await p.evaluate(async()=>{
+    const sample=App.clone(App.catalog.products[0]);delete sample.id;
+    for(let n=0;n<14;n++)await App.db.set('products','page-fixture-'+n,{...sample,slug:'page-fixture-'+n,sku:'PAGE-'+n,name:{ar:'منتج صفحات '+n,en:'Page product '+n},createdAt:'2026-01-01T00:00:00.000Z'});
+    await App.catalog.refresh();
+  });
+  await p.goto(BASE+'shop.html?q=page');await p.waitForSelector('.pagination');
+  if(await p.locator('.shop-results .card').count()!==12)throw new Error('First page count incorrect');
+  await p.click('.pagination a:has-text("التالي")');await p.waitForURL('**page=2');await p.waitForSelector('.pagination');
+  if(await p.locator('.shop-results .card').count()!==2)throw new Error('Second page count incorrect');
+  if(!new URL(p.url()).searchParams.get('q'))throw new Error('Pagination lost query');
+  await p.goBack();await p.waitForSelector('.pagination');
+  if(await p.locator('.shop-results .card').count()!==12)throw new Error('Back did not restore first page');
+  if(!await p.locator('.filter-panel').evaluate(e=>e.open))await p.click('.filter-panel summary');
+  await p.fill('.shop-filters [name=min]','500');await p.fill('.shop-filters [name=max]','100');await p.click('.shop-filters button[type=submit]');
+  if(!(await p.textContent('.shop-filters [role=alert]')))throw new Error('Invalid range missing error');
+},vp);
+
 await browser.close();
 console.log(failures ? `${failures} failed` : 'all passed');
 process.exit(failures ? 1 : 0);

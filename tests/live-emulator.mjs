@@ -63,6 +63,7 @@ async function newPage(viewport = { width: 390, height: 844 }) {
   pages.push(page);
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
+  if(process.env.DEBUG)page.on('response',r=>{if(r.status()===403){const u=new URL(r.url());console.log('DEBUG 403 '+u.origin+u.pathname);}});
   page.on('requestfailed', r => errors.push('requestfailed ' + r.url() + ' ' + (r.failure() || {}).errorText));
   page.on('console', m => { if (m.type() === 'error' && !/PERMISSION_DENIED.*admins|favicon/.test(m.text())) errors.push(m.text()); });
   errorsByPage.push(errors);
@@ -201,9 +202,6 @@ await step('profile update and password change', async () => {
 await step('single-owner admin has no staff controls', async () => {
   const p=A.page; await p.goto(BASE+'admin/index.html');await p.waitForSelector('.side-nav',{state:'attached'});
   if(await p.$('a[data-route="staff"]'))throw new Error('Staff controls are visible');
-  await B.page.goto(BASE+'account.html');
-  await B.page.waitForFunction(()=>!!window.App?.auth);
-  await B.page.evaluate(async()=>{await App.auth.init();await App.auth.logout();await App.auth.login('sara@shop.test','sarapass34');});
   await B.page.goto(BASE+'admin/index.html');await B.page.waitForSelector('text=مش عنده صلاحية');
 });
 
@@ -229,6 +227,24 @@ await step('Firestore catalog transaction, image upload, stock audit and setting
   if(result.stock!==9||!result.staleRejected||result.logs!==2||result.threshold!==0||!result.image.startsWith('fs:'))throw new Error(JSON.stringify(result));
   await p.goto(BASE+'admin/index.html#/inventory');await p.waitForSelector('text=LIVE-STAGE3-V');
   await p.screenshot({path:OUT+'live-stage3-inventory.png',fullPage:true});
+});
+
+await step('storefront product and wishlist persist with Firebase rules', async () => {
+  const p=B.page;
+  await p.goto(BASE+'shop.html?q=LIVE-STAGE3');await p.waitForFunction(()=>window.App?.catalog?.loadedAt);
+  await p.evaluate(()=>App.catalog.refresh());await p.waitForSelector('.shop-results .card');
+  await p.click('.card-title a');await p.waitForSelector('.product-layout');
+  await p.locator('[data-color]:not([disabled])').first().click();await p.locator('[data-size]:not([disabled])').first().click();
+  if(!(await p.textContent('.product-stock')).includes('9'))throw new Error('Live stock mismatch');
+  await p.click('.product-actions [data-wish]');await p.waitForSelector('.product-actions [aria-pressed="true"]');
+  const uid=await uidOf('sara@shop.test');
+  const profile=await consoleGet('users/'+uid);
+  if(profile.fields.wishlist.arrayValue.values.length!==1)throw new Error('Wishlist was not saved in Firestore');
+  await p.goto(BASE+'wishlist.html');await p.waitForSelector('.wishlist-grid .card');await p.reload();await p.waitForSelector('.wishlist-grid .card');
+  await p.screenshot({path:OUT+'live-stage4-wishlist.png',fullPage:true});
+  await p.click('.wishlist-grid [data-wish]');await p.waitForSelector('.empty');
+  const after=await consoleGet('users/'+uid);
+  if(after.fields.wishlist.arrayValue.values?.length)throw new Error('Wishlist removal was not persisted');
 });
 
 await step('wrong password shows an error', async () => {

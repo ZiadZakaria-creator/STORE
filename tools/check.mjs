@@ -83,7 +83,7 @@ const ctx = makeContext();
 ctx.FIREBASE_CONFIG = null;
 ['js/core/core.js', 'js/core/config.js', 'js/core/i18n.js', 'js/core/money.js', 'js/core/validate.js',
   'js/core/db.js', 'js/core/db-demo.js', 'js/core/db-firebase.js', 'js/core/auth.js', 'data/demo-data.js',
-  'js/services/governorates.js', 'js/services/settings.js', 'js/services/catalog.js', 'js/services/images.js',
+  'js/services/governorates.js', 'js/services/settings.js', 'js/services/catalog.js', 'js/services/storefront.js', 'js/services/images.js',
   'js/services/addresses.js', 'js/services/audit.js', 'js/services/catalog-admin.js', 'js/services/settings-admin.js'
 ].forEach(f => load(ctx, f));
 const App = ctx.App;
@@ -303,6 +303,49 @@ for (const p of D.products) {
 }
 ok(D.products.some(p => p.variants.every(v => v.stock === 0)), 'demo has a sold-out product');
 eq(App.governorates.length, 27, '27 governorates');
+
+/* ---------- المرحلة ٤: الفلاتر والتركيبات والمفضلة ---------- */
+await App.catalog.refresh();
+const C=App.catalog;
+const fixture={id:'filter-test',categoryId:'men',subcategoryId:'men-tshirts',name:{ar:'أحمر قطن',en:'Red cotton'},sku:'FILTER',price:100,salePrice:80,variants:[{sku:'R-S',color:'RED',size:'S',stock:2,reserved:2,priceDelta:0},{sku:'B-M',color:'BLK',size:'M',stock:4,reserved:1,priceDelta:30}]};
+eq(C.query({color:'RED',size:'M'},[fixture]).length,0,'color and size must match the same variant');
+eq(C.query({color:'RED',stock:true},[fixture]).length,0,'reserved units are not available');
+eq(C.query({color:'BLK',min:105,max:115,stock:true},[fixture]).length,1,'price filters include variant delta and sale price');
+eq(C.query({max:100,color:'BLK'},[fixture]).length,0,'price cannot match a different color');
+eq(C.query({q:'احمر قطن'},[fixture]).length,1,'Arabic search normalizes alef and combines terms');
+eq(C.query({q:'COTTON'},[fixture]).length,1,'search is case insensitive across languages');
+eq(C.query({cat:'missing'},[fixture]).length,0,'unknown category does not expose all products');
+eq(C.priceRange(fixture),{min:80,max:110},'price range includes all variant deltas');
+eq(C.paginate(Array.from({length:25},(_,i)=>i),99),{items:[24],page:3,pages:3,total:25},'pagination clamps oversized page');
+eq(C.paginate([],0).page,1,'empty pagination remains valid');
+const menCategory=await App.db.get('categories','men');
+await App.db.update('categories','men',{hidden:true});await C.refresh();
+ok(!C.categories.some(c=>c.parentId==='men')&&!C.products.some(p=>p.categoryId==='men'),'hidden category hides descendants and products');
+await App.db.update('categories','men',{hidden:menCategory.hidden||false});await C.refresh();
+load(ctx,'js/services/wishlist.js');
+await App.wishlist.init();
+await App.wishlist.set('guest-product',true);
+eq(App.wishlist.ids,['guest-product'],'guest wishlist persists locally');
+await A.register({name:'Wishlist Owner',email:'wish@test.com',phone:'01012345678',password:'password123'});await App.wishlist.init();
+const wishUid=A.user.uid;
+eq((await App.db.get('users',wishUid)).wishlist,['guest-product'],'guest wishlist merged on registration');
+eq(App.store.get('wishlist:guest'),[],'merged guest IDs cleared to prevent account leakage');
+await App.db.update('users',wishUid,{wishlist:['guest-product','other-tab']});
+await App.wishlist.set('new-product',true);
+eq((await App.db.get('users',wishUid)).wishlist,['guest-product','other-tab','new-product'],'wishlist update preserves another tab changes');
+await App.wishlist.set('guest-product',false);
+ok(!App.wishlist.has('guest-product'),'remove saved product');
+const originalTx=App.db.tx,previousWishlist=App.wishlist.ids;
+App.db.tx=async()=>{throw new Error('offline');};
+await rejectMessage(()=>App.wishlist.set('failed-product',true),/offline/,'failed write is reported');
+eq(App.wishlist.ids,previousWishlist,'failed write does not falsely update wishlist');App.db.tx=originalTx;
+await A.logout();await App.wishlist.init();eq(App.wishlist.ids,[],'logout does not expose account wishlist');
+await A.register({name:'Other Owner',email:'other-wish@test.com',phone:'01012345678',password:'password123'});await App.wishlist.init();
+eq(App.wishlist.ids,[],'different account starts with its own wishlist');
+await A.logout();await App.wishlist.init();
+await A.login('wish@test.com','password123');await App.wishlist.init();
+eq(App.wishlist.ids,previousWishlist,'wishlist restored on login');
+await A.logout();await App.wishlist.init();
 
 /* ---------- النتيجة ---------- */
 console.log(`checks: ${passed} passed, ${failed} failed`);

@@ -1,4 +1,4 @@
-/* home.js — الصفحة الرئيسية (نسخة المرحلة 1: hero + الأقسام + وصل حديثاً) */
+/* home.js — الصفحة الرئيسية (الرئيسية والأقسام ورفوف المنتجات) */
 (function (root) {
   'use strict';
   const App = root.App;
@@ -69,6 +69,6 @@
   App.page(function () {
     const main = App.$('#main');
     main.textContent = '';
-    main.append(...[hero(), categories(), newArrivals()].filter(Boolean));
+    main.append(...[hero(), categories(), newArrivals(), App.productShelf('home.featured', App.catalog.query({featured:true}).slice(0,8), 'shop.html?featured=1'), App.productShelf('home.sale', App.catalog.query({sale:true}).slice(0,8), 'shop.html?sale=1')].filter(Boolean));
   });
 })(window);

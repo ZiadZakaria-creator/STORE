@@ -22,9 +22,19 @@
     const results = await Promise.all(COLLECTIONS.map(c => App.db.list(c)));
     const data = {};
     COLLECTIONS.forEach((c, i) => { data[c] = results[i]; });
-    // المنتجات المخفية متتعرضش في المتجر
-    data.products = data.products.filter(p => !p.hidden);
-    data.categories = data.categories.filter(c => !c.hidden);
+    // إخفاء القسم يشمل الفروع والمنتجات التابعة له.
+    const byId = new Map(data.categories.map(c => [c.id,c]));
+    const visible = id => {
+      const seen = new Set();
+      while (id) {
+        const category = byId.get(id);
+        if (!category || category.hidden || seen.has(id)) return false;
+        seen.add(id); id = category.parentId;
+      }
+      return true;
+    };
+    data.products = data.products.filter(p => !p.hidden && visible(p.categoryId) && visible(p.subcategoryId));
+    data.categories = data.categories.filter(c => visible(c.id));
     setData(data);
     C.loadedAt = Date.now();
     App.store.set(CACHE, { at: C.loadedAt, data });

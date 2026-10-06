@@ -63,6 +63,62 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    /* السلات: صاحب الحساب فقط يكتب، والأسعار يعاد حسابها من الكتالوج */
+    // كل سطر productId:sku:qty، لتأكيد كل البنود ضمن حد تعقيد القواعد.
+    function validCartItem(item) {
+      return item is string && item.matches('^[A-Za-z0-9_-]{1,100}:[A-Za-z0-9_-]{2,90}:[1-9][0-9]{0,3}$');
+    }
+    function validCartItems(items) {
+      let n = items.size();
+      return items is list && n <= 20
+        && (n <= 0 || validCartItem(items[0]))
+        && (n <= 1 || validCartItem(items[1]))
+        && (n <= 2 || validCartItem(items[2]))
+        && (n <= 3 || validCartItem(items[3]))
+        && (n <= 4 || validCartItem(items[4]))
+        && (n <= 5 || validCartItem(items[5]))
+        && (n <= 6 || validCartItem(items[6]))
+        && (n <= 7 || validCartItem(items[7]))
+        && (n <= 8 || validCartItem(items[8]))
+        && (n <= 9 || validCartItem(items[9]))
+        && (n <= 10 || validCartItem(items[10]))
+        && (n <= 11 || validCartItem(items[11]))
+        && (n <= 12 || validCartItem(items[12]))
+        && (n <= 13 || validCartItem(items[13]))
+        && (n <= 14 || validCartItem(items[14]))
+        && (n <= 15 || validCartItem(items[15]))
+        && (n <= 16 || validCartItem(items[16]))
+        && (n <= 17 || validCartItem(items[17]))
+        && (n <= 18 || validCartItem(items[18]))
+        && (n <= 19 || validCartItem(items[19]));
+    }
+    match /carts/{uid} {
+      allow get: if isOwner(uid) || can('customers.read');
+      allow list: if can('customers.read');
+      allow create: if isOwner(uid)
+        && !exists(/databases/$(db)/documents/carts/$(uid))
+        && request.resource.data.revision == 1 && validCart();
+      allow update: if isOwner(uid)
+        && exists(/databases/$(db)/documents/carts/$(uid))
+        && request.resource.data.revision == resource.data.revision + 1 && validCart();
+      function validCart() {
+        let data = request.resource.data;
+        return data.keys().hasOnly(['items','couponCode','revision','updatedAt'])
+          && data.couponCode is string
+          && (data.couponCode == '' || data.couponCode.matches('^[A-Z0-9_-]{2,40}$'))
+          && data.updatedAt == request.time && data.revision is int
+          && validCartItems(data.items);
+      }
+      allow delete: if isOwner(uid);
+    }
+
+    /* قراءة كود معروف فقط؛ إدارة الكوبونات للمدير العام */
+    match /coupons/{code} {
+      allow get: if true;
+      allow list: if isSuperAdmin();
+      allow create, update, delete: if isSuperAdmin();
+    }
+
     /* ---------- العملاء ---------- */
     match /users/{uid} {
       allow read: if isOwner(uid) || can('customers.read') || can('staff.manage') || can('orders.read');
@@ -79,6 +135,11 @@ service cloud.firestore {
         && (request.resource.data.phone == '' || phoneEG(request.resource.data.phone))
         && request.resource.data.wishlist is list && request.resource.data.wishlist.size() <= 200;
       allow delete: if false;
+
+      match /couponUsage/{code} {
+        allow get: if isOwner(uid) || isSuperAdmin();
+        allow list, write: if false;
+      }
 
       match /addresses/{aid} {
         allow read, delete: if isOwner(uid);

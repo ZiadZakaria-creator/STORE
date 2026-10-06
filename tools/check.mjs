@@ -84,7 +84,7 @@ ctx.FIREBASE_CONFIG = null;
 ['js/core/core.js', 'js/core/config.js', 'js/core/i18n.js', 'js/core/money.js', 'js/core/validate.js',
   'js/core/db.js', 'js/core/db-demo.js', 'js/core/db-firebase.js', 'js/core/auth.js', 'data/demo-data.js',
   'js/services/governorates.js', 'js/services/settings.js', 'js/services/catalog.js', 'js/services/storefront.js', 'js/services/images.js',
-  'js/services/addresses.js', 'js/services/audit.js', 'js/services/catalog-admin.js', 'js/services/settings-admin.js'
+  'js/services/addresses.js', 'js/services/coupons.js', 'js/services/shipping.js', 'js/services/audit.js', 'js/services/catalog-admin.js', 'js/services/settings-admin.js'
 ].forEach(f => load(ctx, f));
 const App = ctx.App;
 
@@ -346,6 +346,40 @@ await A.logout();await App.wishlist.init();
 await A.login('wish@test.com','password123');await App.wishlist.init();
 eq(App.wishlist.ids,previousWishlist,'wishlist restored on login');
 await A.logout();await App.wishlist.init();
+
+/* ---------- المرحلة ٥: سلة وكوبونات وشحن ---------- */
+load(ctx,'js/services/cart.js');await App.cart.init();await App.catalog.refresh();
+const cartProduct=App.catalog.products.find(p=>p.variants.some(v=>App.catalog.available(v)>2));
+const cartVariant=cartProduct.variants.find(v=>App.catalog.available(v)>2);
+await App.cart.add(cartProduct.id,cartVariant.sku,1);await App.cart.add(cartProduct.id,cartVariant.sku,1);
+eq(App.cart.state.items.length,1,'same variant combines into one cart line');eq(App.cart.count,2,'cart combines quantities');
+await rejectMessage(()=>App.cart.add(cartProduct.id,cartVariant.sku,100000),/الكمية|كمية/,'cart quantity bounded');
+await rejectMessage(()=>App.cart.setQuantity(cartProduct.id,cartVariant.sku,App.catalog.available(cartVariant)+1),/المخزون/,'cart cannot exceed available stock');
+await rejectMessage(()=>App.cart.setQuantity(cartProduct.id,cartVariant.sku,1.5),/كمية/,'cart rejects fractional quantity');
+await App.db.set('coupons','TEST10',{type:'percent',value:10,minOrder:0,maxDiscount:30,startsAt:'2020-01-01',expiresAt:'2099-01-01',active:true,usedCount:0,usageLimit:10,perCustomerLimit:null,allowedUids:[]});
+eq((await App.coupons.check('test10',{subtotal:500})).discount,30,'percent coupon honors max discount');
+await App.db.set('coupons','FIXED',{type:'fixed',value:1000,active:true});eq((await App.coupons.check('FIXED',{subtotal:50})).discount,50,'fixed coupon never makes subtotal negative');
+await App.db.set('coupons','EXPIRED',{type:'fixed',value:10,active:true,expiresAt:'2020-01-01'});await rejectMessage(()=>App.coupons.check('EXPIRED',{subtotal:50}),/انتهت/,'expired coupon rejected');
+await App.db.set('coupons','USED',{type:'fixed',value:10,active:true,usageLimit:1,usedCount:1});await rejectMessage(()=>App.coupons.check('USED',{subtotal:50}),/الاستخدام/,'exhausted coupon rejected');
+await App.db.set('coupons','PERSONAL',{type:'fixed',value:10,active:true,perCustomerLimit:1});await rejectMessage(()=>App.coupons.check('PERSONAL',{subtotal:50}),/سجل دخول/,'per-customer coupon requires login');
+const shippingFixture={governorates:{cairo:{enabled:true,price:70},giza:{enabled:false,price:30}},freeShippingOver:100,etaDays:{min:2,max:4}};
+eq(App.shipping.quote({governorate:'giza',subtotal:500},shippingFixture).available,false,'disabled governorate never eligible for free shipping');
+eq(App.shipping.quote({governorate:'unknown',subtotal:500},shippingFixture).available,false,'unknown governorate rejected');
+eq(App.shipping.quote({governorate:'cairo',subtotal:110,afterCoupon:90},shippingFixture).price,70,'free shipping evaluated after coupon by default');
+eq(App.shipping.quote({governorate:'cairo',subtotal:110,afterCoupon:90},{...shippingFixture,freeShippingBasis:'beforeCoupon'}).price,0,'owner can choose before-coupon free shipping');
+eq(App.shipping.quote({governorate:'cairo',subtotal:50},{...shippingFixture,freeShippingOver:null}).price,70,'null threshold disables free shipping');
+eq(App.shipping.quote({governorate:'cairo',subtotal:50},{...shippingFixture,freeShippingOver:0}).price,0,'zero threshold preserved');
+await App.cart.setCoupon('TEST10');await A.login('wish@test.com','password123');await App.cart.init();
+const cartUid=A.user.uid;eq((await App.db.get('carts',cartUid)).items[0],cartProduct.id+':'+cartVariant.sku+':2','guest cart merges into account');eq(App.store.get('cart:guest'),null,'merged guest cart cleared');
+await App.db.update('carts',cartUid,{items:[cartProduct.id+':'+cartVariant.sku+':1']});
+await App.cart.add(cartProduct.id,cartVariant.sku,1);eq(App.cart.count,2,'cart mutation reads latest quantity from other tab');
+await App.db.set('users/'+cartUid+'/couponUsage','PERSONAL',{count:1});await rejectMessage(()=>App.coupons.check('PERSONAL',{subtotal:50}),/الاستخدام/,'per-customer usage limit checked');
+const savedCart=App.cart.state,realTx=App.db.tx;App.db.tx=async()=>{throw new Error('offline');};
+await rejectMessage(()=>App.cart.remove(cartProduct.id,cartVariant.sku),/offline/,'failed remote cart removal reported');eq(App.cart.state,savedCart,'failed cart write does not show false success');App.db.tx=realTx;
+await A.logout();await App.cart.init();eq(App.cart.count,0,'logout hides account cart');await A.login('wish@test.com','password123');await App.cart.init();eq(App.cart.count,2,'account cart restored');
+const originalProduct=await App.db.get('products',cartProduct.id);await App.db.update('products',cartProduct.id,{hidden:true});await App.catalog.refresh();ok(!!App.cart.lines()[0].issue,'hidden product flagged in saved cart');
+await App.db.update('products',cartProduct.id,{hidden:originalProduct.hidden||false});await App.catalog.refresh();
+await App.cart.clear();await A.logout();await App.cart.init();
 
 /* ---------- النتيجة ---------- */
 console.log(`checks: ${passed} passed, ${failed} failed`);

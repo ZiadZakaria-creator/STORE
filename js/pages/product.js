@@ -31,6 +31,8 @@
       dialog.addEventListener('click',event=>{if(event.target===dialog)dialog.close();});
       dialog.addEventListener('close',()=>{dialog.remove();mainImage.focus();},{once:true});document.body.append(dialog);dialog.showModal();
     });
+    const qty=h('input',{type:'number',class:'input product-quantity',value:1,min:1,max:App.cart.MAX_QTY,step:1,'aria-label':App.t('cart.quantity')});
+    const add=h('button',{type:'button',class:'btn btn-primary product-add',disabled:true,text:App.t('product.add')});
     const price=h('div',{class:'price product-price','aria-live':'polite'}),stock=h('p',{class:'product-stock',role:'status'}),sku=h('p',{class:'muted product-sku'});
     const colorGroup=h('fieldset',{class:'variant-options'},h('legend',{text:App.t('shop.color')}));
     const sizeGroup=h('fieldset',{class:'variant-options'},h('legend',{text:App.t('shop.size')}));
@@ -52,14 +54,20 @@
       if(onSale&&variant)price.append(h('span',{class:'old',text:App.money.format(p.price+Number(variant.priceDelta||0))}));
       stock.textContent=!C.inStock(p)?App.t('product.soldOut'):variant?App.t(C.available(variant)?'product.available':'product.unavailable',{n:C.available(variant)}):App.t('product.choose');
       sku.textContent=variant?App.t('product.sku',{sku:variant.sku}):'';
+      add.disabled=!variant||C.available(variant)<1;qty.disabled=add.disabled;qty.max=variant?Math.min(App.cart.MAX_QTY,C.available(variant)):App.cart.MAX_QTY;
     }
+    add.addEventListener('click',()=>App.cartAction(add,async()=>{
+      const variant=variants.find(v=>v.color===selectedColor&&v.size===selectedSize);
+      if(!variant)throw new Error(App.t('product.choose'));
+      await App.cart.add(p.id,variant.sku,Number(qty.value));App.toast(App.t('cart.added'));App.openCart?.();
+    }));
     drawGallery();drawOptions();
     const brand=C.brand(p.brandId),category=C.category(p.subcategoryId||p.categoryId);
     const bread=[{text:App.t('nav.shop'),href:'shop.html'},...C.categoryPath(category?.id).map(c=>({text:App.tx(c.name),href:'shop.html?cat='+encodeURIComponent(c.slug)})),{text:App.tx(p.name)}];
     const info=h('div',{class:'product-info'},[
       brand?h('a',{class:'muted',href:'shop.html?brand='+encodeURIComponent(brand.id),text:brand.name}):null,
       h('h1',{text:App.tx(p.name)}),price,colorGroup,sizeGroup,stock,sku,
-      h('div',{class:'product-actions'},[App.wishlistButton(p.id),h('a',{class:'btn btn-outline',href:'wishlist.html',text:App.t('nav.wishlist')})]),
+      h('div',{class:'product-actions'},[qty,add,App.wishlistButton(p.id),h('a',{class:'btn btn-outline',href:'wishlist.html',text:App.t('nav.wishlist')})]),
       h('section',{class:'product-description'},[h('h2',{text:App.t('product.details')}),h('p',{text:App.tx(p.description)||App.t('product.descriptionEmpty')})])
     ]);
     const whatsapp=App.settings.general.whatsapp;

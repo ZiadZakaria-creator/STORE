@@ -1,9 +1,9 @@
 /* sw.js — PWA. زوّد VERSION مع كل تغيير في الملفات علشان العملاء ياخدوا النسخة الجديدة. */
-const VERSION = 'v11';
+const VERSION = 'v13';
 const CACHE = 'store-' + VERSION;
 
 const CORE = [
-  './', 'index.html', 'shop.html', 'product.html', 'wishlist.html', 'account.html', '404.html', 'manifest.webmanifest', 'firebase-config.js',
+  './', 'index.html', 'shop.html', 'product.html', 'wishlist.html', 'cart.html', 'checkout.html', 'account.html', '404.html', 'manifest.webmanifest', 'firebase-config.js',
   'assets/css/tokens.css', 'assets/css/base.css', 'assets/css/components.css', 'assets/css/store.css',
   'assets/img/icon.svg',
   'js/core/boot.js', 'js/core/core.js', 'js/core/config.js', 'js/core/i18n.js', 'js/core/money.js',
@@ -14,6 +14,8 @@ const CORE = [
   'js/services/catalog-admin.js', 'js/services/settings-admin.js',
   'js/services/storefront.js', 'js/services/wishlist.js', 'js/ui/storefront.js',
   'js/pages/shop.js', 'js/pages/product.js', 'js/pages/wishlist.js',
+  'js/services/cart.js', 'js/services/coupons.js', 'js/services/shipping.js', 'js/ui/cart.js',
+  'js/pages/cart.js', 'js/pages/checkout.js',
   'js/pages/home.js', 'js/pages/account.js', 'js/pages/notfound.js'
 ];
 

@@ -157,6 +157,45 @@ await t('movement additional fields rejected', () => assertFails(setDoc(doc(boss
 await t('movement short reason rejected', () => assertFails(setDoc(doc(boss,'inventoryLogs/x'),{...movement(),reason:''})));
 await t('stock movements are immutable', async () => { await assertFails(updateDoc(doc(boss,'inventoryLogs/m1'),{reason:'changed'})); await assertFails(deleteDoc(doc(boss,'inventoryLogs/m1'))); });
 
+// المرحلة 5: السلات والكوبونات وحد الاستخدام لكل عميل.
+const cartData=(patch={})=>({items:['p1:P1-BLK-M:2'],couponCode:'',revision:1,updatedAt:serverTimestamp(),...patch});
+await t('owner creates cart',()=>assertSucceeds(setDoc(doc(alice,'carts/alice'),cartData())));
+await t('owner reads cart',()=>assertSucceeds(getDoc(doc(alice,'carts/alice'))));
+await t('admin reads carts',()=>assertSucceeds(getDocs(collection(boss,'carts'))));
+await t('guest cannot read cart',()=>assertFails(getDoc(doc(anon,'carts/alice'))));
+await t('another customer cannot read cart',()=>assertFails(getDoc(doc(bob,'carts/alice'))));
+await t('customer cannot list carts',()=>assertFails(getDocs(collection(alice,'carts'))));
+await t('another customer cannot write cart',()=>assertFails(setDoc(doc(bob,'carts/alice'),cartData({revision:2}))));
+await t('guest cannot write cart',()=>assertFails(setDoc(doc(anon,'carts/anon'),cartData())));
+await t('owner updates cart revision',()=>assertSucceeds(setDoc(doc(alice,'carts/alice'),cartData({revision:2,couponCode:'SAVE10'}))));
+await t('stale cart revision rejected',()=>assertFails(setDoc(doc(alice,'carts/alice'),cartData({revision:2}))));
+await t('negative cart quantity rejected',()=>assertFails(setDoc(doc(alice,'carts/alice'),cartData({revision:3,items:['p1:P1-BLK-M:-1']}))));
+await t('fractional cart quantity rejected',()=>assertFails(setDoc(doc(alice,'carts/alice'),cartData({revision:3,items:['p1:P1-BLK-M:1.5']}))));
+await t('cart item cannot inject price',()=>assertFails(setDoc(doc(alice,'carts/alice'),cartData({revision:3,items:['p1:P1-BLK-M:1:price=1']}))));
+await t('cart cannot inject total',()=>assertFails(setDoc(doc(alice,'carts/alice'),cartData({revision:3,total:1}))));
+await t('cart cannot forge timestamp',()=>assertFails(setDoc(doc(alice,'carts/alice'),cartData({revision:3,updatedAt:new Date('2020-01-01')}))));
+await t('cart line limit enforced',()=>assertFails(setDoc(doc(alice,'carts/alice'),cartData({revision:3,items:Array.from({length:21},()=>('p1:SKU:1'))}))));
+await t('full cart of twenty valid items accepted',()=>assertSucceeds(setDoc(doc(alice,'carts/alice'),cartData({revision:3,items:Array.from({length:20},(_,i)=>('p'+i+':SKU'+i+':1'))}))));
+await t('last cart item validated',()=>assertFails(setDoc(doc(alice,'carts/alice'),cartData({revision:4,items:[...Array.from({length:19},()=>('p1:SKU:1')),'p1:BAD:0']}))));
+await t('owner can empty cart',()=>assertSucceeds(setDoc(doc(alice,'carts/alice'),cartData({revision:4,items:[]}))));
+await t('another customer cannot delete cart',()=>assertFails(deleteDoc(doc(bob,'carts/alice'))));
+await t('owner deletes cart',()=>assertSucceeds(deleteDoc(doc(alice,'carts/alice'))));
+await t('boss creates coupon',()=>assertSucceeds(setDoc(doc(boss,'coupons/SAVE10'),{type:'percent',value:10,active:true})));
+await t('guest can get known coupon',()=>assertSucceeds(getDoc(doc(anon,'coupons/SAVE10'))));
+await t('guest can check missing coupon without permission error',()=>assertSucceeds(getDoc(doc(anon,'coupons/MISSING'))));
+await t('guest cannot list coupon codes',()=>assertFails(getDocs(collection(anon,'coupons'))));
+await t('customer cannot list coupon codes',()=>assertFails(getDocs(collection(alice,'coupons'))));
+await t('boss can list coupon codes',()=>assertSucceeds(getDocs(collection(boss,'coupons'))));
+await t('customer cannot create coupon',()=>assertFails(setDoc(doc(alice,'coupons/FREE'),{value:100,active:true})));
+await t('inactive admin cannot create coupon',()=>assertFails(setDoc(doc(fired,'coupons/FREE'),{value:100,active:true})));
+await t('customer cannot change coupon counters',()=>assertFails(updateDoc(doc(alice,'coupons/SAVE10'),{usedCount:0})));
+await t('customer cannot delete coupon',()=>assertFails(deleteDoc(doc(alice,'coupons/SAVE10'))));
+await t('owner can read own coupon usage',()=>assertSucceeds(getDoc(doc(alice,'users/alice/couponUsage/SAVE10'))));
+await t('customer cannot read other coupon usage',()=>assertFails(getDoc(doc(bob,'users/alice/couponUsage/SAVE10'))));
+await t('guest cannot read coupon usage',()=>assertFails(getDoc(doc(anon,'users/alice/couponUsage/SAVE10'))));
+await t('customer cannot forge usage count',()=>assertFails(setDoc(doc(alice,'users/alice/couponUsage/SAVE10'),{count:0})));
+await t('coupon usage listing denied',()=>assertFails(getDocs(collection(alice,'users/alice/couponUsage'))));
+
 await env.cleanup();
 console.log(`rules: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

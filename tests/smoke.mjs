@@ -277,6 +277,68 @@ for(const vp of ['mobile','desktop'])await run('stage4-edge','shop.html',async p
   if(!(await p.textContent('.shop-filters [role=alert]')))throw new Error('Invalid range missing error');
 },vp);
 
+async function stageFive(p,vp){
+  await p.waitForSelector('.shop-results .card');
+  const fixture=await p.evaluate(async()=>{
+    await App.db.update('settings','shipping',{freeShippingOver:900,freeShippingBasis:'afterCoupon',governorates:{cairo:{enabled:true,price:80},giza:{enabled:false,price:0}}});
+    await App.db.set('coupons','TEST10',{type:'percent',value:10,minOrder:0,active:true,usedCount:0,usageLimit:10});
+    await App.loadSettings(true);
+    const product=App.catalog.products.find(p=>p.variants.some(v=>App.catalog.available(v)>=3));
+    const variant=product.variants.find(v=>App.catalog.available(v)>=3);
+    return {slug:product.slug,id:product.id,sku:variant.sku,color:variant.color,size:variant.size,price:App.catalog.price(product,variant),stock:variant.stock};
+  });
+  await p.goto(BASE+'product.html?slug='+fixture.slug);await p.waitForSelector('.product-add');
+  if(!await p.isDisabled('.product-add'))throw new Error('Add enabled before choosing variant');
+  await p.click(`[data-color="${fixture.color}"]`);await p.click(`[data-size="${fixture.size}"]`);
+  await p.fill('.product-quantity','2');await p.click('.product-add');await p.waitForSelector('#cart-drawer.open');
+  if(await p.textContent('[data-count=cart]')!=='2')throw new Error('Cart badge quantity incorrect');
+  await p.evaluate(()=>scrollTo(0,0));await p.screenshot({path:OUT+`stage5-drawer-${vp}.png`,fullPage:true});
+  await p.click('#cart-drawer a[href="cart.html"]');await p.waitForSelector('.cart-line');
+  await p.reload();await p.waitForSelector('.cart-line');
+  if(await p.inputValue('.cart-quantity')!=='2')throw new Error('Guest cart did not persist');
+  await p.selectOption('[name=governorate]','cairo');await p.waitForSelector('.order-summary');
+  if(!await p.locator('[name=governorate] option[value=giza]').isDisabled())throw new Error('Disabled governorate selectable');
+  await p.fill('[name=coupon]','BADCODE');await p.click('.coupon-form [type=submit]');
+  await p.waitForFunction(()=>document.querySelector('.coupon-form .field-error').textContent.length>0);
+  await p.fill('[name=coupon]','TEST10');await p.click('.coupon-form [type=submit]');
+  await p.waitForFunction(()=>App.cart.state.couponCode==='TEST10');await p.waitForSelector('.grand-total');
+  const discounted=Math.round(fixture.price*2*0.9*100)/100,shipping=discounted>=900?0:80;
+  const expected=await p.evaluate(amount=>App.money.format(amount),discounted+shipping);
+  if(!(await p.textContent('.grand-total')).includes(expected))throw new Error('Cart total incorrect');
+  await p.evaluate(()=>scrollTo(0,0));await p.screenshot({path:OUT+`stage5-cart-${vp}.png`,fullPage:true});
+  await p.click('a[href^="checkout.html"]');await p.waitForSelector('.checkout-form');
+  await p.click('.checkout-form [type=submit]');
+  if(!(await p.textContent('[data-error-for=name]')))throw new Error('Checkout did not validate recipient');
+  for(const [field,value] of Object.entries({name:'عميل اختبار',phone:'01012345678',city:'القاهرة',area:'مدينة نصر',street:'شارع اختبار',building:'12',floor:'2',apartment:'4',notes:'علامة اختبار'}))await p.fill('.checkout-form [name='+field+']',value);
+  await p.selectOption('.checkout-form [name=governorate]','cairo');
+  await p.click('.checkout-form [type=submit]');await p.waitForSelector('.checkout-review h2');
+  if(!(await p.textContent('.checkout-review .grand-total')).includes(expected))throw new Error('Review total incorrect');
+  const effects=await p.evaluate(async({id,sku})=>({orders:(await App.db.list('orders')).length,stock:(await App.db.get('products',id)).variants.find(v=>v.sku===sku).stock,used:(await App.db.get('coupons','TEST10')).usedCount}),fixture);
+  if(effects.orders||effects.stock!==fixture.stock||effects.used!==0)throw new Error('Review created an order, consumed stock or consumed coupon');
+  await p.evaluate(()=>scrollTo(0,0));await p.screenshot({path:OUT+`stage5-checkout-${vp}.png`,fullPage:true});
+  await p.goto(BASE+'account.html');await p.waitForSelector('.auth-panel');await p.click('.tabs .tab:nth-child(2)');
+  await p.fill('[name=name]','Cart Customer');await p.fill('[name=email]',`cart-${vp}@test.com`);await p.fill('[name=phone]','01012345678');await p.fill('[name=password]','cartpass123');await p.click('button[type=submit]');await p.waitForSelector('.account-head');
+  await p.waitForFunction(async()=>{const cart=await App.db.get('carts',App.auth.user.uid);return cart?.items?.length===1;});
+  await p.evaluate(()=>App.addresses.save(App.auth.user.uid,{label:'البيت',name:'Saved Recipient',phone:'01112345678',governorate:'cairo',city:'Saved City',area:'Saved Area',street:'Saved Street',building:'3',floor:'1',apartment:'2',notes:''}));
+  await p.goto(BASE+'checkout.html');await p.waitForSelector('[aria-label="عنوان محفوظ"]');
+  const savedId=await p.locator('[aria-label="عنوان محفوظ"] option').nth(1).getAttribute('value');await p.selectOption('[aria-label="عنوان محفوظ"]',savedId);
+  if(await p.inputValue('.checkout-form [name=city]')!=='Saved City'||await p.inputValue('.checkout-form [name=phone]')!=='01112345678')throw new Error('Saved address was not applied');
+  await p.goto(BASE+'cart.html');await p.waitForSelector('.cart-line');await p.fill('.cart-quantity','1');await p.locator('.cart-quantity').press('Tab');
+  await p.waitForFunction(()=>App.cart.count===1);
+  await p.evaluate(async({id,sku})=>{const product=await App.db.get('products',id);await App.db.update('products',id,{variants:product.variants.map(v=>v.sku===sku?{...v,stock:0,reserved:0}:v)});await App.catalog.refresh();},fixture);
+  await p.waitForSelector('.cart-line .field-error');
+  if(await p.locator('a[href^="checkout.html"]').count())throw new Error('Checkout offered with invalid cart');
+  await p.click('.cart-line .text-link');await p.waitForSelector('#main .empty');
+  const remote=await p.evaluate(()=>App.db.get('carts',App.auth.user.uid));if(remote.items.length)throw new Error('Remote cart removal failed');
+}
+for(const vp of ['mobile','desktop'])await run('stage5-flow','shop.html',p=>stageFive(p,vp),vp);
+await run('stage5-english-dark','cart.html',async p=>{
+  await p.waitForSelector('#main .empty');if(await p.textContent('h1')!=='Cart')throw new Error('Cart English missing');
+  await p.evaluate(async()=>{const product=App.catalog.products.find(p=>App.catalog.inStock(p)),variant=product.variants.find(v=>App.catalog.available(v)>0);await App.cart.add(product.id,variant.sku,1);});
+  await p.waitForSelector('.cart-line');await p.goto(BASE+'checkout.html');await p.waitForSelector('.checkout-form');
+  if(!(await p.textContent('h1')).includes('Delivery details'))throw new Error('Checkout English missing');
+},'mobile',{lang:'en',dark:true});
+
 await browser.close();
 console.log(failures ? `${failures} failed` : 'all passed');
 process.exit(failures ? 1 : 0);

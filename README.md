@@ -6,7 +6,7 @@
 - **التصميم الكامل:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - **قواعد الشغل:** [`AGENTS.md`](AGENTS.md).
 
-> الحالة: **المرحلة 4 خلصت — واجهة المتجر والمفضلة جاهزين، وقواعد المرحلة 3 منشورة حسب تأكيد صاحب المتجر** (rules متجربة على الـ Emulator). الخطوات اللي هتعملها بإيدك في [`FIREBASE_SETUP.md`](FIREBASE_SETUP.md)، والتسليم للي هيكمل في [`docs/HANDOFF.md`](docs/HANDOFF.md).
+> الحالة: **المرحلة 5 خلصت — السلة ومراجعة التوصيل جاهزين؛ مطلوب نشر قواعد المرحلة 5 يدويًا** (rules متجربة على الـ Emulator). الخطوات اللي هتعملها بإيدك في [`FIREBASE_SETUP.md`](FIREBASE_SETUP.md)، والتسليم للي هيكمل في [`docs/HANDOFF.md`](docs/HANDOFF.md).
 
 ## التشغيل محلياً
 مش محتاج تسطّب أي حاجة:
@@ -63,7 +63,7 @@ assets/css/   tokens.css (الألوان والمسافات) · base.css · comp
 js/core/      core · config · i18n · money · validate · db (+ db-demo, db-firebase) · auth
 js/services/  catalog · storefront · wishlist · catalog-admin · settings · settings-admin · images · governorates · addresses · audit
 js/ui/        common (هيدر/فوتر) · product-card · forms · icons
-js/pages/     home · shop · product · wishlist · account · notfound
+js/pages/     home · shop · product · wishlist · cart · checkout · account · notfound
 data/         demo-data.js (للوضع التجريبي بس)
 admin/        لوحة التحكم: admin.js (الدخول والراوتر) · admin-ui · overview · products · categories · catalog-meta · inventory · settings · audit · setup
 firestore.rules, firestore.indexes.json, firebase.json, FIREBASE_SETUP.md
@@ -72,7 +72,7 @@ tests/        smoke.mjs (تجريبي) · rules.test.mjs · live-emulator.mjs (F
 ```
 
 ## اللي لسه جاي
-السلة، والـ checkout، والطلبات، والدفع، والشحن، ولوحة التحكم، والتقارير، والكوبونات، والتقييمات، و SEO. التفاصيل في `docs/HANDOFF.md`. وفي آخر مرحلة هيتضاف لـ README:
+إرسال الطلبات، والدفع، والشحن، ولوحة التحكم، والتقارير، والكوبونات، والتقييمات، و SEO. التفاصيل في `docs/HANDOFF.md`. وفي آخر مرحلة هيتضاف لـ README:
 - إعداد الدفع.
 - ربط شركات الشحن.
 - إنشاء حساب الأدمن.
@@ -85,4 +85,10 @@ tests/        smoke.mjs (تجريبي) · rules.test.mjs · live-emulator.mjs (F
 - `wishlist.html`: مفضلة للزائر والحساب.
 - تفاصيل التحقق: [`docs/STAGE4-VALIDATION.md`](docs/STAGE4-VALIDATION.md).
 
-السلة والدفع والطلبات مراحل لاحقة؛ المرحلة الحالية لا تتيح إتمام شراء.
+السلة ومراجعة العنوان والإجمالي جاهزين. إرسال الطلبات والدفع مراحل لاحقة؛ المرحلة الحالية لا تتيح إتمام شراء.
+
+
+- `cart.html`: السلة والكميات والكوبون الاختياري وحساب الشحن.
+- `checkout.html`: العنوان وملخص المراجعة بدون إرسال طلب.
+- [التحقق من المرحلة 5](docs/STAGE5-VALIDATION.md).
+- قبل الاستخدام: انسخ `firestore.rules` إلى Firebase Console ← Firestore Database ← Rules ← Publish.

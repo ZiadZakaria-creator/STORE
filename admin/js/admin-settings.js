@@ -23,6 +23,7 @@
       h('p',{class:'muted',text:'المحافظة المقفولة مش متاحة للتوصيل. فعّل بس المناطق اللي بتوصلها فعلًا وحدد السعر.'}),
       h('div',{class:'form-grid'},[
         F.field({name:'freeShippingOver',label:'شحن مجاني من إجمالي',type:'number',value:shipping.freeShippingOver,hint:'سيبه فاضي لإلغاء الشحن المجاني؛ صفر يعني مجاني دائمًا للمناطق المفعّلة'}),
+        F.field({name:'freeShippingBasis',label:'حد الشحن المجاني يتحسب',type:'select',value:shipping.freeShippingBasis||'afterCoupon',options:[{value:'afterCoupon',label:'بعد خصم الكوبون'},{value:'beforeCoupon',label:'قبل خصم الكوبون'}]}),
         F.field({name:'etaMin',label:'أقل مدة توصيل بالأيام',type:'number',value:shipping.etaDays?.min??2}),
         F.field({name:'etaMax',label:'أكبر مدة توصيل بالأيام',type:'number',value:shipping.etaDays?.max??5})
       ]),h('div',{class:'shipping-grid'},shippingRows)
@@ -31,7 +32,7 @@
     form.addEventListener('submit',e=>{e.preventDefault();U.action(save,async()=>{
       const v=F.values(form),governorates={};
       App.governorates.forEach(g=>{governorates[g.id]={enabled:form.elements['enabled_'+g.id].checked,price:form.elements['price_'+g.id].value};});
-      await App.saveStoreSettings({storeName:{ar:v.storeNameAr,en:v.storeNameEn},whatsapp:v.whatsapp,lowStockThreshold:v.lowStockThreshold,freeShippingOver:v.freeShippingOver,etaMin:v.etaMin,etaMax:v.etaMax,governorates,revisions:{general:general.revision||0,shipping:shipping.revision||0,inventory:inventory.revision||0}});
+      await App.saveStoreSettings({storeName:{ar:v.storeNameAr,en:v.storeNameEn},whatsapp:v.whatsapp,lowStockThreshold:v.lowStockThreshold,freeShippingOver:v.freeShippingOver,freeShippingBasis:v.freeShippingBasis,etaMin:v.etaMin,etaMax:v.etaMax,governorates,revisions:{general:general.revision||0,shipping:shipping.revision||0,inventory:inventory.revision||0}});
       App.toast('الإعدادات اتحفظت');el.textContent='';await this.render(el);
     },error);});
     el.append(form);

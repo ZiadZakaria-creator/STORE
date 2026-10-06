@@ -247,6 +247,25 @@ await step('storefront product and wishlist persist with Firebase rules', async 
   if(after.fields.wishlist.arrayValue.values?.length)throw new Error('Wishlist removal was not persisted');
 });
 
+await step('Firebase cart, coupon, shipping and checkout review', async () => {
+  await A.page.evaluate(()=>App.db.set('coupons','LIVE10',{type:'percent',value:10,minOrder:0,active:true,usedCount:0,usageLimit:10}));
+  const p=B.page;
+  await p.goto(BASE+'product.html?slug=live-stage3-shirt');await p.waitForSelector('.product-layout');
+  await p.locator('[data-color]:not([disabled])').first().click();await p.locator('[data-size]:not([disabled])').first().click();
+  await p.fill('.product-quantity','2');await p.click('.product-add');await p.waitForSelector('#cart-drawer.open');
+  await p.click('#cart-drawer a[href="cart.html"]');await p.waitForSelector('.cart-line');await p.reload();await p.waitForSelector('.cart-line');
+  if(await p.inputValue('.cart-quantity')!=='2')throw new Error('Firebase cart quantity did not persist');
+  await p.selectOption('[name=governorate]','cairo');
+  await p.fill('[name=coupon]','LIVE10');await p.click('.coupon-form [type=submit]');await p.waitForFunction(()=>App.cart.state.couponCode==='LIVE10');
+  await p.waitForSelector('a[href^="checkout.html"]');await p.click('a[href^="checkout.html"]');await p.waitForSelector('.checkout-form');
+  for(const [field,value] of Object.entries({name:'Sara Customer',phone:'01012345678',city:'Cairo',area:'Nasr City',street:'Test Street',building:'12'}))await p.fill('.checkout-form [name='+field+']',value);
+  await p.selectOption('.checkout-form [name=governorate]','cairo');await p.click('.checkout-form [type=submit]');await p.waitForSelector('.checkout-review h2');
+  const result=await p.evaluate(async()=>({cart:await App.db.get('carts',App.auth.user.uid),coupon:await App.db.get('coupons','LIVE10')}));
+  if(result.cart.items.length!==1||result.coupon.usedCount!==0)throw new Error('Review mutated coupon usage or lost cart');
+  if((await consoleList('orders')).length)throw new Error('Review created orders prematurely');
+  await p.evaluate(()=>scrollTo(0,0));await p.screenshot({path:OUT+'live-stage5-checkout.png',fullPage:true});
+});
+
 await step('wrong password shows an error', async () => {
   const C = await newPage();
   await C.page.goto(BASE + 'account.html');

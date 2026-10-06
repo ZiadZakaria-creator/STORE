@@ -12,6 +12,8 @@
     const threshold = n(input.lowStockThreshold, true);
     if (threshold > 1000000) throw new Error('حد المخزون غير صحيح.');
     const free = input.freeShippingOver === '' || input.freeShippingOver == null ? null : n(input.freeShippingOver);
+    const basis = input.freeShippingBasis || 'afterCoupon';
+    if (!['afterCoupon','beforeCoupon'].includes(basis)) throw new Error('اختار طريقة حساب حد الشحن المجاني.');
     const min = n(input.etaMin, true), max = n(input.etaMax, true);
     if (min < 1 || max < min || max > 60) throw new Error('راجع أقل وأكبر عدد أيام للتوصيل.');
     const governorates = {};
@@ -31,7 +33,7 @@
       const clean = value => { const out = {...value}; delete out.id; return out; };
       const after = {
         general: {...App.config.defaults.general,...clean(general),storeName:{ar,en},whatsapp:phone ? '20'+phone.slice(1) : '',revision:(general?.revision||0)+1},
-        shipping: {...clean(shipping),governorates,othersEnabled:false,othersPrice:0,freeShippingOver:free,etaDays:{min,max},revision:(shipping?.revision||0)+1},
+        shipping: {...clean(shipping),governorates,othersEnabled:false,othersPrice:0,freeShippingOver:free,freeShippingBasis:basis,etaDays:{min,max},revision:(shipping?.revision||0)+1},
         inventory: {...clean(inventory),lowStockThreshold:threshold,revision:(inventory?.revision||0)+1}
       };
       Object.entries(after).forEach(([id,data])=>t.set('settings',id,data));

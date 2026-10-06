@@ -148,3 +148,31 @@
   .shop-results .product-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
   .product-layout { grid-template-columns: minmax(0,1.1fr) minmax(0,1fr); gap: var(--sp-7); }
 }
+
+/* ---------- السلة ومراجعة التوصيل ---------- */
+.cart-layout { display: grid; gap: var(--sp-5); align-items: start; }
+.cart-layout > * { min-width: 0; }
+.cart-items { display: grid; gap: var(--sp-4); }
+.cart-line { display: flex; align-items: start; gap: var(--sp-3); padding-block: var(--sp-4); border-bottom: 1px solid var(--line); }
+.cart-image { flex: 0 0 80px; }
+.cart-image img { width: 100%; aspect-ratio: 4/5; object-fit: contain; background: var(--surface-2); border-radius: var(--radius-sm); }
+.cart-line-info { flex: 1; min-width: 0; display: grid; gap: var(--sp-2); font-size: var(--fs-sm); }
+.cart-title { font-weight: var(--fw-bold); overflow-wrap: anywhere; }
+.cart-line-actions { display: flex; gap: var(--sp-4); align-items: center; flex-wrap: wrap; }
+.cart-line-total { font-size: var(--fs-sm); white-space: nowrap; }
+.cart-quantity, .product-quantity { width: 76px; }
+.cart-summary { display: grid; gap: var(--sp-4); padding: var(--sp-5); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.cart-summary h2 { font-size: var(--fs-lg); }
+.coupon-form { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.coupon-form input { min-width: 0; flex: 1 1 120px; width: 100%; }
+.coupon-form .field-error { flex-basis: 100%; }
+.order-summary { display: grid; gap: var(--sp-3); }
+.total-row { display: flex; justify-content: space-between; gap: var(--sp-4); font-size: var(--fs-sm); }
+.total-row strong { white-space: nowrap; }
+.grand-total { border-top: 1px solid var(--line); padding-top: var(--sp-3); }
+.grand-total .total-row { font-size: var(--fs-lg); }
+.checkout-form .form-grid { display: grid; gap: var(--sp-4); }
+.checkout-review:not(:empty) { margin-top: var(--sp-6); padding: var(--sp-5); border: 1px solid var(--line); border-radius: var(--radius); display: grid; gap: var(--sp-4); scroll-margin-top: calc(var(--header-h) + var(--sp-7)); }
+#cart-drawer .btn { margin-top: var(--sp-4); }
+@media(min-width:900px) { .cart-layout { grid-template-columns: minmax(0,1.5fr) minmax(0,1fr); } .checkout-form .form-grid { grid-template-columns: 1fr 1fr; } }
+@media(max-width:480px) { .cart-line { flex-wrap: wrap; } .cart-line-total { flex-basis: 100%; text-align: end; } }

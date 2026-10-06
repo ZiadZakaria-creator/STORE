@@ -51,7 +51,15 @@
       if (lastFocus) lastFocus.focus();
     }
     overlay.addEventListener('click', close);
-    panel.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+    panel.addEventListener('keydown', e => {
+      if(e.key==='Escape')close();
+      if(e.key==='Tab'){
+        const nodes=[...panel.querySelectorAll('a[href],button:not([disabled]),input:not([disabled]),select:not([disabled])')].filter(n=>n.getClientRects().length);
+        const first=nodes[0],last=nodes[nodes.length-1];
+        if(e.shiftKey&&(document.activeElement===first||document.activeElement===panel)){e.preventDefault();last?.focus();}
+        else if(!e.shiftKey&&(document.activeElement===last||document.activeElement===panel)){e.preventDefault();first?.focus();}
+      }
+    });
     document.body.append(overlay, panel);
     return { open, close, panel };
   }
@@ -116,6 +124,13 @@
     ].filter(Boolean));
 
     const menu = drawer('menu-drawer', 'nav.menu', buildMenu());
+    if (App.cart) {
+      const contents=h('div');App.fillCartDrawer(contents);
+      const cartDrawer=drawer('cart-drawer','nav.cart',contents);
+      const cartLink=mount.querySelector('a[href="cart.html"]');
+      cartLink.addEventListener('click',event=>{if(!event.ctrlKey&&!event.metaKey&&!event.shiftKey&&!event.altKey){event.preventDefault();cartDrawer.open();}});
+      App.openCart=cartDrawer.open;
+    }
     menuBtn.addEventListener('click', menu.open);
     themeBtn.addEventListener('click', () => { App.theme.toggle(); themeBtn.innerHTML = App.theme.current() === 'dark' ? icons.sun : icons.moon; });
     langBtn.addEventListener('click', () => App.i18n.toggle());
@@ -162,6 +177,7 @@
     renderHeader();
     renderFooter();
     App.paintWishlist?.();
+    App.paintCart?.();
     document.title = document.title.replace(/\{store\}/g, App.storeName());
   };
 
@@ -172,6 +188,7 @@
         await App.db.init();
         await Promise.all([App.loadSettings(), App.catalog.load(), App.auth.init()]);
         if (App.wishlist) await App.wishlist.init().catch(() => App.toast(App.t('wish.syncError')));
+        if (App.cart) await App.cart.init().catch(() => App.toast(App.t('cart.syncError')));
       } catch (e) {
         console.error(e);
         App.toast(App.t('common.error'));

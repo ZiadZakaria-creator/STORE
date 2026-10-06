@@ -1,7 +1,8 @@
 // smoke.mjs — بيفتح الصفحات على موبايل وديسكتوب، وبياخد screenshots، وبيفشل لو فيه أخطاء console.
 // التشغيل: python3 -m http.server 8080 & ثم: NODE_PATH=$(npm root -g) node tests/smoke.mjs [baseUrl]
 import { createRequire } from 'node:module';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
+import { deflateRawSync } from 'node:zlib';
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
 
@@ -338,6 +339,76 @@ await run('stage5-english-dark','cart.html',async p=>{
   await p.waitForSelector('.cart-line');await p.goto(BASE+'checkout.html');await p.waitForSelector('.checkout-form');
   if(!(await p.textContent('h1')).includes('Delivery details'))throw new Error('Checkout English missing');
 },'mobile',{lang:'en',dark:true});
+
+// ملف مضغوط مثل Excel: إعادة ضغط ZIP المخزن لاختبار deflate-raw.
+function compressedWorkbook(bytes) {
+  const parts=[],central=[];let p=0,offset=0;
+  while(bytes.readUInt32LE(p)===0x04034b50){
+    const n=bytes.readUInt16LE(p+26),extra=bytes.readUInt16LE(p+28),size=bytes.readUInt32LE(p+18);
+    const name=bytes.subarray(p+30,p+30+n),raw=bytes.subarray(p+30+n+extra,p+30+n+extra+size),packed=deflateRawSync(raw);
+    const header=Buffer.from(bytes.subarray(p,p+30+n));header.writeUInt16LE(8,8);header.writeUInt32LE(packed.length,18);
+    const c=Buffer.alloc(46+n);c.writeUInt32LE(0x02014b50);c.writeUInt16LE(20,4);c.writeUInt16LE(20,6);c.writeUInt16LE(8,10);c.writeUInt32LE(header.readUInt32LE(14),16);c.writeUInt32LE(packed.length,20);c.writeUInt32LE(raw.length,24);c.writeUInt16LE(n,28);c.writeUInt32LE(offset,42);name.copy(c,46);
+    parts.push(header,packed);central.push(c);offset+=header.length+packed.length;p+=30+n+extra+size;
+  }
+  const end=Buffer.alloc(22);end.writeUInt32LE(0x06054b50);end.writeUInt16LE(central.length,8);end.writeUInt16LE(central.length,10);end.writeUInt32LE(central.reduce((n,b)=>n+b.length,0),12);end.writeUInt32LE(offset,16);
+  return Buffer.concat([...parts,...central,end]);
+}
+for(const vp of ['mobile','desktop'])await run('product-excel','admin/index.html',async p=>{
+  await p.click('.gate [data-role="super_admin"]');await p.waitForSelector('.kpis');
+  await p.evaluate(()=>{location.hash='#/products';});await p.getByRole('button',{name:'تصدير البضاعة',exact:true}).waitFor();
+  await p.screenshot({path:OUT+`excel-buttons-${vp}.png`,fullPage:true});
+  // التصدير يشمل المنتجات المخفية ولا يتأثر بالفلتر.
+  await p.fill('[aria-label="بحث المنتجات"]','does-not-exist');
+  const [download]=await Promise.all([p.waitForEvent('download'),p.getByRole('button',{name:'تصدير البضاعة',exact:true}).click()]);
+  const exportPath=OUT+`products-${vp}.xlsx`;await download.saveAs(exportPath);
+  const bytes=readFileSync(exportPath);if(bytes.readUInt32LE(0)!==0x04034b50)throw new Error('Export is not a real XLSX ZIP');
+  await p.getByRole('link',{name:'استيراد Excel',exact:true}).click();
+  const [template]=await Promise.all([p.waitForEvent('download'),p.getByRole('button',{name:'تحميل قالب Excel',exact:true}).click()]);
+  if(template.suggestedFilename()!=='products-template.xlsx')throw new Error('Missing Excel template');
+  const countBefore=await p.evaluate(async()=>(await App.db.list('products')).length);
+  const upload=buffer=>p.getByLabel('ملف Excel للمنتجات').setInputFiles({name:'products.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer});
+  await upload(Buffer.from('invalid file'));await p.waitForFunction(()=>document.querySelector('[data-sheet-error]')?.textContent.length>0);
+  if(!await p.getByRole('button',{name:'تأكيد الاستيراد',exact:true}).isDisabled())throw new Error('Malformed file can be saved');
+  // إنشاء ملف جديد من قالب التصدير، بدون أسعار أو صور وهمية في المشروع الحقيقي.
+  const fixture=await p.evaluate(async()=>{
+    const data=await App.catalogAdmin.load(),source=data.products[0];
+    const product={...source,id:'',revision:'',sku:'EXCEL-UI',slug:'excel-ui',name:{ar:'قميص مستورد <اختبار>',en:'=HYPERLINK("https://example.com")'},hidden:false,variants:[{...source.variants[0],sku:'EXCEL-UI-V',stock:6,reserved:0,sold:0}]};
+    const sheets=App.productSheet.sheets({...data,products:[product]});
+    // معادلة السعر دي نص حرفي آمن في ملف التصدير، مش صيغة Excel.
+    const blob=App.excel.write(sheets);return {bytes:[...new Uint8Array(await blob.arrayBuffer())],rows:sheets[0].rows};
+  });
+  await upload(compressedWorkbook(Buffer.from(fixture.bytes)));
+  await p.getByRole('button',{name:'تأكيد الاستيراد',exact:true}).waitFor();
+  await p.waitForFunction(()=>!Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='تأكيد الاستيراد').disabled);
+  if((await p.evaluate(async()=>(await App.db.list('products')).length))!==countBefore)throw new Error('Preview wrote products');
+  const clipped=await p.evaluate(()=>Array.from(document.querySelectorAll('.product-sheet > p,.product-sheet > input,.product-sheet > button')).some(e=>{const r=e.getBoundingClientRect();return r.left<0||r.right>innerWidth;}));
+  if(clipped)throw new Error('Excel preview controls or instructions clipped');
+  await p.evaluate(()=>scrollTo(0,0));await p.screenshot({path:OUT+`excel-preview-${vp}.png`,fullPage:true});
+  await p.getByRole('button',{name:'تأكيد الاستيراد',exact:true}).click();
+  await p.waitForFunction(()=>Array.from(document.querySelectorAll('[role=status]')).some(e=>e.textContent.includes('تم استيراد 1')));
+  const imported=await p.evaluate(async()=>{
+    const product=(await App.db.list('products')).find(p=>p.sku==='EXCEL-UI');
+    if(!product||product.variants[0].stock!==6)throw new Error('Imported stock not saved');
+    const data=await App.catalogAdmin.load(),sheets=App.productSheet.sheets({...data,products:[product]});
+    const rows=sheets[0].rows;rows[1][App.productSheet.columns.findIndex(c=>c[0]==='stock')]=8;
+    return {id:product.id,slug:product.slug,color:product.variants[0].color,size:product.variants[0].size,bytes:[...new Uint8Array(await App.excel.write(sheets).arrayBuffer())]};
+  });
+  await upload(Buffer.from(imported.bytes));await p.waitForFunction(()=>!Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='تأكيد الاستيراد').disabled);
+  await p.getByRole('button',{name:'تأكيد الاستيراد',exact:true}).click();await p.waitForFunction(()=>Array.from(document.querySelectorAll('[role=status]')).some(e=>e.textContent.includes('تم استيراد 1')));
+  if(await p.evaluate(async id=>(await App.db.get('products',id)).variants[0].stock,imported.id)!==8)throw new Error('Existing product not updated');
+  await upload(Buffer.from(imported.bytes));await p.waitForFunction(()=>document.querySelector('[data-sheet-error]')?.textContent.includes('اتغيرت'));
+  if(!await p.getByRole('button',{name:'تأكيد الاستيراد',exact:true}).isDisabled())throw new Error('Stale sheet accepted');
+  await p.screenshot({path:OUT+`excel-stale-${vp}.png`,fullPage:true});
+  // المنتج المستورد فعليًا يظهر في المتجر ويتضاف للسلة والمراجعة الحالية.
+  await p.goto(BASE+'product.html?slug='+imported.slug);await p.waitForSelector('.product-add');
+  await p.click(`[data-color="${imported.color}"]`);await p.click(`[data-size="${imported.size}"]`);await p.click('.product-add');await p.waitForSelector('#cart-drawer.open');
+  await p.goto(BASE+'checkout.html');await p.waitForSelector('.checkout-form');
+  await p.evaluate(async()=>{await App.db.set('settings','shipping',{governorates:{cairo:{enabled:true,price:50}},freeShippingOver:null,eta:{min:2,max:5}});});
+  await p.reload();await p.waitForSelector('.checkout-form');
+  for(const [field,value] of Object.entries({name:'عميل الشيت',phone:'01012345678',city:'القاهرة',area:'مدينة نصر',street:'شارع الاختبار',building:'1'}))await p.fill('.checkout-form [name='+field+']',value);
+  await p.selectOption('.checkout-form [name=governorate]','cairo');await p.click('.checkout-form [type=submit]');await p.waitForSelector('.checkout-review h2');
+  if(!(await p.textContent('.checkout-review')).includes('قميص مستورد'))throw new Error('Imported product missing from checkout');
+},vp);
 
 await browser.close();
 console.log(failures ? `${failures} failed` : 'all passed');

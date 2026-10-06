@@ -266,6 +266,25 @@ await step('Firebase cart, coupon, shipping and checkout review', async () => {
   await p.evaluate(()=>scrollTo(0,0));await p.screenshot({path:OUT+'live-stage5-checkout.png',fullPage:true});
 });
 
+await step('Excel bulk import transaction at 50 products / 150 variants', async () => {
+  const p=A.page;await p.goto(BASE+'admin/index.html#/products');await p.waitForSelector('text=تصدير البضاعة');
+  const result=await p.evaluate(async()=>{
+    const source=(await App.catalogAdmin.load()).products.find(p=>p.sku==='LIVE-STAGE3');
+    const combinations=App.demoData.products[0].variants.slice(0,3);
+    const batch=Array.from({length:50},(_,i)=>({...source,id:undefined,revision:0,row:i+2,sku:'BULK-'+i,slug:'bulk-'+i,hidden:true,variants:combinations.map((v,j)=>({...v,sku:`BULK-${i}-${j}`,stock:3,reserved:0,sold:0}))}));
+    const before=(await App.db.list('products')).length;
+    await App.catalogAdmin.previewImport(batch);
+    const previewCount=(await App.db.list('products')).length;
+    const count=await App.catalogAdmin.importProducts(batch);
+    const after=await App.db.list('products'), imported=after.filter(p=>p.sku.startsWith('BULK-'));
+    const logs=(await App.db.list('inventoryLogs')).filter(l=>l.reason==='products.import');
+    const audit=(await App.db.list('auditLogs')).filter(l=>l.action==='products.import');
+    let rejected=false;try{await App.catalogAdmin.importProducts(batch);}catch(e){rejected=true;}
+    return {before,previewCount,count,added:after.length-before,products:imported.length,logs:logs.length,audit:audit.length,rejected};
+  });
+  if(result.before!==result.previewCount||result.count!==50||result.added!==50||result.products!==50||result.logs!==150||result.audit!==1||!result.rejected)throw new Error(JSON.stringify(result));
+});
+
 await step('wrong password shows an error', async () => {
   const C = await newPage();
   await C.page.goto(BASE + 'account.html');

@@ -87,6 +87,7 @@
     el.append(U.box(old?'تعديل المنتج':'إضافة منتج',form));
   }
   App.admin.route({id:'products',label:'المنتجات',icon:App.adminIcons.overview,perm:'products.write',async render(el,param){
+    if(param==='import')return App.productSheetUI.render(el);
     if(param)return editor(el,param==='new'?null:param);
     const products=await App.db.list('products');
     const search=h('input',{class:'input',type:'search',placeholder:'بحث بالاسم أو الكود','aria-label':'بحث المنتجات'});
@@ -109,6 +110,6 @@
       ]}));
     };
     search.addEventListener('input',draw);filter.addEventListener('change',draw);draw();
-    el.append(U.box('إدارة المنتجات',h('div',{class:'form'},[h('div',{class:'toolbar'},[search,filter]),table]),h('a',{href:'#/products/new',class:'btn btn-primary',text:'إضافة منتج'})));
+    el.append(U.box('إدارة المنتجات',h('div',{class:'form'},[h('div',{class:'toolbar'},[search,filter]),table]),h('div',{class:'toolbar'},[h('a',{href:'#/products/new',class:'btn btn-primary',text:'إضافة منتج'}),h('a',{href:'#/products/import',class:'btn btn-outline',text:'استيراد Excel'}),h('button',{class:'btn btn-outline',text:'تصدير البضاعة',onclick:e=>U.action(e.currentTarget,()=>App.productSheetUI.export())})])));
   }});
 })(window);

@@ -84,7 +84,7 @@ ctx.FIREBASE_CONFIG = null;
 ['js/core/core.js', 'js/core/config.js', 'js/core/i18n.js', 'js/core/money.js', 'js/core/validate.js',
   'js/core/db.js', 'js/core/db-demo.js', 'js/core/db-firebase.js', 'js/core/auth.js', 'data/demo-data.js',
   'js/services/governorates.js', 'js/services/settings.js', 'js/services/catalog.js', 'js/services/storefront.js', 'js/services/images.js',
-  'js/services/addresses.js', 'js/services/coupons.js', 'js/services/shipping.js', 'js/services/audit.js', 'js/services/catalog-admin.js', 'js/services/settings-admin.js'
+  'js/services/addresses.js', 'js/services/coupons.js', 'js/services/shipping.js', 'js/services/audit.js', 'js/services/catalog-admin.js', 'js/services/product-sheet.js', 'js/services/settings-admin.js'
 ].forEach(f => load(ctx, f));
 const App = ctx.App;
 
@@ -254,6 +254,51 @@ await App.catalogAdmin.removeProduct(copyId);
 const same=await Promise.allSettled([0,1].map(()=>App.catalogAdmin.saveProduct({...created,slug:'parallel-product',sku:'PARALLEL',variants:[{...created.variants[0],sku:'PARALLEL-V'}]})));
 eq(same.filter(r=>r.status==='fulfilled').length,1,'concurrent catalog writes cannot duplicate slug/SKU');
 for(const r of same)if(r.status==='fulfilled')await App.catalogAdmin.removeProduct(r.value);
+// استيراد Excel: معاينة، حفظ ذري، وحماية المخزون والإصدارات.
+const sheetData=await App.catalogAdmin.load();
+const sheetRows=App.productSheet.sheets({...sheetData,products:[await App.db.get('products',pid)]})[0].rows;
+const parsedSheet=App.productSheet.parse(sheetRows);
+eq(parsedSheet.length,1,'sheet groups variants by product');
+eq(parsedSheet[0].id,pid,'sheet roundtrip retains product identity');
+const indexOf=k=>App.productSheet.columns.findIndex(c=>c[0]===k);
+const badRows=App.clone(sheetRows);badRows[1][indexOf('stock')]='-1';
+await rejectMessage(()=>App.productSheet.parse(badRows),/الصف 2/,'sheet reports row for invalid numbers');
+const conflictRows=App.clone(sheetRows);conflictRows.push([...conflictRows[1]]);conflictRows[2][indexOf('nameAr')]='different';
+await rejectMessage(()=>App.productSheet.parse(conflictRows),/متطابقة/,'repeated product details must agree');
+const dupHeader=App.clone(sheetRows);dupHeader[0][1]=dupHeader[0][0];
+await rejectMessage(()=>App.productSheet.parse(dupHeader),/مكررة/,'duplicate column rejected');
+await rejectMessage(()=>App.productSheet.parse([sheetRows[0]]),/مفيهوش/,'empty template rejected');
+const missingHeader=App.clone(sheetRows);missingHeader[0][indexOf('stock')]='';
+await rejectMessage(()=>App.productSheet.parse(missingHeader),/ناقص/,'missing required column rejected');
+const tooMany=[sheetRows[0],...Array.from({length:151},()=>sheetRows[1])];
+await rejectMessage(()=>App.productSheet.parse(tooMany),/١٥٠/,'row cap enforced');
+const importNew={...App.clone(created),row:2,sku:'SHEET-NEW',slug:'sheet-new',id:undefined,demo:false,variants:[{...created.variants[0],sku:'SHEET-NEW-V',stock:7}]};
+const initialProducts=await App.db.list('products');
+await App.catalogAdmin.previewImport([importNew]);
+eq((await App.db.list('products')).length,initialProducts.length,'preview does not write');
+await rejectMessage(()=>App.catalogAdmin.importProducts([importNew,{...importNew,sku:'OTHER-SHEET',slug:'other-sheet'}]),/مستخدم/,'cross-product duplicate variant rejected');
+eq(await App.db.list('products'),initialProducts,'invalid batch writes nothing');
+await rejectMessage(()=>App.catalogAdmin.importProducts([{...importNew,variants:[{...importNew.variants[0],color:'missing'}]}]),/لون/,'unknown reference rejected');
+await App.catalogAdmin.importProducts([importNew]);
+let imported=(await App.db.list('products')).find(p=>p.sku==='SHEET-NEW');
+ok(!!imported,'new imported product persisted');
+ok((await App.db.list('inventoryLogs')).some(l=>l.productId===imported.id&&l.reason==='products.import'&&l.delta.stock===7),'import movement recorded');
+ok((await App.db.list('auditLogs')).some(l=>l.action==='products.import'),'import audited');
+await rejectMessage(()=>App.catalogAdmin.importProducts([importNew]),/مستخدم/,'replaying new import cannot duplicate products');
+const sourceVariant=sampleProduct.variants.find(v=>v.color!==imported.variants[0].color||v.size!==imported.variants[0].size);
+await App.db.update('products',imported.id,{variants:[{...imported.variants[0],reserved:2,sold:3},...(sourceVariant?[{...sourceVariant,sku:'SHEET-KEEP',stock:4,reserved:0,sold:0}]:[])]});
+imported=await App.db.get('products',imported.id);
+const partial={...imported,row:2,variants:[{...imported.variants[0],stock:9,reserved:999,sold:999}]};
+await App.catalogAdmin.importProducts([partial]);
+const changed=await App.db.get('products',imported.id);
+eq([changed.variants[0].stock,changed.variants[0].reserved,changed.variants[0].sold],[9,2,3],'import preserves server reserved and sold');
+eq(changed.variants.length,imported.variants.length,'absent variants preserved');
+await rejectMessage(()=>App.catalogAdmin.importProducts([partial]),/اتغيرت/,'stale sheet cannot overwrite stock');
+await rejectMessage(()=>App.catalogAdmin.importProducts([{...changed,variants:[{...changed.variants[0],stock:1}]}]),/المحجوز/,'import cannot reduce stock below reservations');
+await rejectMessage(()=>App.catalogAdmin.importProducts([{...changed,variants:[{...changed.variants[0],stock:2.5}]}]),/رقم/,'fractional stock rejected');
+await App.db.update('products',imported.id,{variants:changed.variants.map(v=>({...v,reserved:0,sold:0}))});
+await App.catalogAdmin.removeProduct(imported.id);
+
 const c1=await App.catalogAdmin.saveMeta('categories',{name:{ar:'اختبار',en:'Test'},slug:'test-cat'});
 const c2=await App.catalogAdmin.saveMeta('categories',{name:{ar:'فرعي',en:'Sub'},slug:'test-sub',parentId:c1});
 await rejectMessage(async()=>App.catalogAdmin.saveMeta('categories',{...(await App.db.get('categories',c1)),parentId:c2}),/تابع لنفسه/,'category cycle rejected');
@@ -281,6 +326,7 @@ eq((await App.db.get('products',pid)).name,beforeSeed.name,'existing product unc
 await App.catalogAdmin.removeProduct(pid);
 await A.logout();
 await rejectMessage(()=>App.catalogAdmin.saveProduct(created),/للمدير العام/,'signed out catalog write denied');
+await rejectMessage(()=>App.catalogAdmin.importProducts([importNew]),/للمدير العام/,'signed out import denied');
 
 /* ---------- 4) سلامة البيانات التجريبية ---------- */
 const D = App.demoData;

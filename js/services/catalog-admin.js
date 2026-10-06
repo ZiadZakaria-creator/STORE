@@ -97,8 +97,44 @@
       reason, orderId: null
     })).filter(m => m.delta.stock !== 0);
   };
+  function prepareImport(inputs, data) {
+    if (!Array.isArray(inputs) || !inputs.length || inputs.length > 50 || inputs.reduce((n,p)=>n+(p.variants?.length||0),0)>150) fail('الحد الأقصى ٥٠ منتج و١٥٠ تركيبة في كل استيراد.');
+    const staged = {...data, products:[...data.products]}, entries=[], errors=[], ids=new Set();
+    for (const input of inputs) {
+      try {
+        if (input.id && ids.has(input.id)) fail('نفس معرف المنتج مكرر.');
+        if (input.id) ids.add(input.id);
+        const old = data.products.find(p=>p.id===input.id);
+        if (input.id && !old) fail('المنتج مش موجود. صدّر أحدث نسخة.');
+        checkRevision(old,input.revision);
+        const incoming=App.clone(input); delete incoming.row;
+        // الصفوف الغائبة لا تحذف تركيبات موجودة.
+        incoming.variants=[...(input.variants||[]),...(old?.variants||[]).filter(v=>!input.variants.some(x=>String(x.sku).toUpperCase()===v.sku))];
+        const p=normalizeProduct(incoming,old,staged), id=old?.id||App.randomId();
+        entries.push({id,old,product:p,row:input.row});
+        staged.products=staged.products.filter(p=>p.id!==id);staged.products.push({...p,id});
+      } catch(e) { errors.push(`الصف ${input.row||'?'}: ${e.message}`); }
+    }
+    if(errors.length)fail(errors.join('\n'));
+    return entries;
+  }
   App.catalogAdmin = {
     load, number, requireAdmin,
+    async previewImport(inputs) {
+      requireAdmin('products.write');
+      return prepareImport(inputs,await load()).map(e=>({id:e.id,name:e.product.name.ar,sku:e.product.sku,updated:!!e.old,variants:e.product.variants.length,stock:e.product.variants.reduce((n,v)=>n+v.stock,0)}));
+    },
+    importProducts(inputs) {
+      return change('products.write',data=>{
+        const entries=prepareImport(inputs,data);
+        return {
+          writes:entries.map(e=>({collection:'products',id:e.id,data:e.product})),
+          movements:entries.flatMap(e=>movements(e.id,e.old,e.product,'products.import')),
+          audit:audit('products.import','products','sheet',null,{ids:entries.map(e=>e.id),created:entries.filter(e=>!e.old).length,updated:entries.filter(e=>e.old).length}),
+          result:entries.length
+        };
+      });
+    },
     async seedMissing(collection, id, record) {
       requireAdmin('products.write');
       const added = await App.db.tx(async t => {

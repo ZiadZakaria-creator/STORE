@@ -92,3 +92,7 @@ tests/        smoke.mjs (تجريبي) · rules.test.mjs · live-emulator.mjs (F
 - `checkout.html`: العنوان وملخص المراجعة بدون إرسال طلب.
 - [التحقق من المرحلة 5](docs/STAGE5-VALIDATION.md).
 - قبل الاستخدام: انسخ `firestore.rules` إلى Firebase Console ← Firestore Database ← Rules ← Publish.
+
+## Excel للمنتجات
+
+من اللوحة ← المنتجات: **استيراد Excel** مع قالب ومعاينة قبل الحفظ، و**تصدير البضاعة** كملف `.xlsx`. طريقة الاستخدام والحدود في [دليل Excel](docs/PRODUCT-EXCEL.md).

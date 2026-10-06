@@ -98,3 +98,8 @@
 .shipping-row{padding:var(--sp-3);border:1px solid var(--line);border-radius:var(--radius-sm)}
 .toolbar{flex-wrap:wrap}.toolbar .input{max-width:100%;min-width:0}.field{min-width:0}.field input[type=file]{width:100%}
 @media(max-width:650px){.form-grid,.shipping-grid{grid-template-columns:1fr}.variant-row{grid-template-columns:repeat(2,minmax(0,1fr));padding:var(--sp-3)}.variant-row .field:first-child{grid-column:1/-1}.product-editor .box-body{padding:var(--sp-3)}.admin-content{padding:var(--sp-3)}}
+
+.sheet-error { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 18rem; overflow-y: auto; }
+
+.product-sheet { min-width: 0; grid-template-columns: minmax(0, 1fr); }
+.product-sheet > * { min-width: 0; }
